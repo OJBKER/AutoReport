@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>Spring Boot + Vue 示例</title>
     <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+    <!-- 在 Vue CDN 下面引入 Pinia CDN -->
+    <script src="https://unpkg.com/pinia@2.0.14/dist/pinia.iife.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; }
         #app { max-width: 400px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; }
@@ -25,35 +27,64 @@
 </div>
 <script>
 const { createApp } = Vue;
-createApp({
-    data() {
-        return {
-            name: '',
-            msg: '',
-            names: []
-        }
-    },
-    mounted() {
-        this.fetchNames();
-    },
-    methods: {
-        async submit() {
-            const res = await fetch('/api/names', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: this.name })
-            });
-            const data = await res.json();
-            this.msg = '提交成功！';
-            this.names = data;
-            this.name = '';
+const { createPinia, defineStore } = Pinia;
+
+// 定义一个 Pinia store
+const useNameStore = defineStore('nameStore', {
+    state: () => ({
+        names: []
+    }),
+    actions: {
+        setNames(list) {
+            this.names = list;
         },
         async fetchNames() {
             const res = await fetch('/api/names');
             this.names = await res.json();
+        },
+        async addName(name) {
+            const res = await fetch('/api/names', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            this.names = await res.json();
         }
     }
-}).mount('#app');
+});
+
+const app = createApp({
+    data() {
+        return {
+            name: '',
+            msg: ''
+        }
+    },
+    computed: {
+        // 让组件响应 Pinia store 的 names
+        names() {
+            return this.nameStore.names;
+        }
+    },
+    mounted() {
+        this.nameStore.fetchNames();
+    },
+    methods: {
+        async submit() {
+            await this.nameStore.addName(this.name);
+            this.msg = '提交成功！';
+            this.name = '';
+        }
+    },
+    // 在 setup 里获取 store 实例
+    setup() {
+        const nameStore = useNameStore();
+        return { nameStore };
+    }
+});
+
+app.use(createPinia());
+app.mount('#app');
 </script>
 </body>
 </html>
