@@ -1,18 +1,24 @@
 <template>
   <div id="template_app">
-    <HelloWorld msg="欢迎使用 HelloWorld 组件！" />
-    <h2>姓名提交演示</h2>
-    <form @submit.prevent="submit">
-      <label>姓名：<input v-model="name" required /></label>
-      <button type="submit">提交</button>
-    </form>
-    <div v-if="msg" style="margin-top:10px;color:green;">{{ msg }}</div>
-    <h3 style="margin-top:30px;">已提交姓名列表：</h3>
-    <ul>
-      <li v-for="item in names" :key="item">{{ item }}</li>
-    </ul>
-    <h2 style="margin-top:40px;">DeepSeek API 测试</h2>
-    <DeepseekTest />
+    <section class="section hello">
+      <HelloWorld msg="欢迎使用 HelloWorld 组件！" />
+    </section>
+    <section class="section form">
+      <h2>姓名提交演示</h2>
+      <form @submit.prevent="submit" class="name-form">
+        <label>姓名：<input v-model="name" required /></label>
+        <button type="submit">提交</button>
+      </form>
+      <div v-if="msg" class="msg-success">{{ msg }}</div>
+      <h3>已提交姓名列表：</h3>
+      <ul class="name-list">
+        <li v-for="item in names" :key="item">{{ item }}</li>
+      </ul>
+    </section>
+    <section class="section deepseek">
+      <h2>DeepSeek API 测试</h2>
+      <DeepseekTest />
+    </section>
   </div>
 </template>
 
@@ -55,9 +61,3 @@ export default {
   }
 }
 </script>
-
-<style scoped>
-body { font-family: Arial, sans-serif; margin: 40px; }
-#app { max-width: 400px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; }
-button { margin-top: 10px; }
-</style>
