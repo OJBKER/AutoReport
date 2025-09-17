@@ -1,63 +1,86 @@
 <template>
-  <div id="template_app">
-    <section class="section hello">
-      <HelloWorld msg="欢迎使用 HelloWorld 组件！" />
-    </section>
-    <section class="section form">
-      <h2>姓名提交演示</h2>
-      <form @submit.prevent="submit" class="name-form">
-        <label>姓名：<input v-model="name" required /></label>
-        <button type="submit">提交</button>
-      </form>
-      <div v-if="msg" class="msg-success">{{ msg }}</div>
-      <h3>已提交姓名列表：</h3>
-      <ul class="name-list">
-        <li v-for="item in names" :key="item">{{ item }}</li>
-      </ul>
-    </section>
-    <section class="section deepseek">
-      <h2>DeepSeek API 测试</h2>
-      <DeepseekTest />
-    </section>
-  </div>
+	<div class="text-demo">
+		<input v-model="inputText" placeholder="请输入内容" />
+		<button @click="sendText">发送到后端</button>
+		<div v-if="responseText" class="response">后端返回：{{ responseText }}</div>
+			<button @click="exportDoc" style="margin-top:16px;">导出数据库内容为 Word</button>
+	</div>
 </template>
 
-<script>
+<script setup>
+import { ref } from 'vue'
+const inputText = ref('')
+const responseText = ref('')
 
-import HelloWorld from './components/HelloWorld.vue';
-import DeepseekTest from './components/DeepseekTest.vue';
+async function sendText() {
+	if (!inputText.value.trim()) return
+	try {
+		const res = await fetch('/api/text', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ text: inputText.value })
+		})
+		if (!res.ok) throw new Error('后端请求失败')
+		const data = await res.json()
+		responseText.value = data.text || JSON.stringify(data)
+	} catch (e) {
+		responseText.value = '请求失败: ' + e.message
+	}
+}
 
-export default {
-  components: {
-    HelloWorld,
-    DeepseekTest
-  },
-  data() {
-    return {
-      name: '',
-      msg: '',
-      names: []
-    }
-  },
-  mounted() {
-    this.fetchNames();
-  },
-  methods: {
-    async submit() {
-      const res = await fetch('/api/names', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: this.name })
-      });
-      const data = await res.json();
-      this.msg = '提交成功！';
-      this.names = data;
-      this.name = '';
-    },
-    async fetchNames() {
-      const res = await fetch('/api/names');
-      this.names = await res.json();
-    }
-  }
+async function exportDoc() {
+	try {
+		const res = await fetch('/api/text/export', {
+			method: 'POST'
+		})
+		if (!res.ok) throw new Error('导出失败')
+		const blob = await res.blob()
+		const url = window.URL.createObjectURL(blob)
+		const a = document.createElement('a')
+		a.href = url
+		a.download = 'export.docx'
+		document.body.appendChild(a)
+		a.click()
+		a.remove()
+		window.URL.revokeObjectURL(url)
+	} catch (e) {
+		responseText.value = '导出失败: ' + e.message
+	}
 }
 </script>
+
+<style scoped>
+.text-demo {
+	max-width: 400px;
+	margin: 60px auto;
+	padding: 24px;
+	background: #fff;
+	border-radius: 8px;
+	box-shadow: 0 2px 12px #eee;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+input {
+	padding: 6px 10px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+}
+button {
+	padding: 6px 18px;
+	background: #409eff;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+button:hover {
+	background: #1976d2;
+}
+.response {
+	color: #1976d2;
+	margin-top: 8px;
+}
+</style>
+
