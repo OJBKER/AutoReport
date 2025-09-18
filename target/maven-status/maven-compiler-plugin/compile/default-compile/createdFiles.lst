@@ -1,7 +1,8 @@
-com\example\demo\NameRepository.class
 com\example\demo\DemoApplication.class
-com\example\demo\NameController.class
-com\example\demo\TextController.class
+com\example\demo\repository\UsersRepository.class
+com\example\demo\SecurityConfig.class
+com\example\demo\entity\Users.class
+com\example\demo\controller\TextController.class
 com\example\demo\HelloController.class
 com\example\demo\DeepseekController.class
-com\example\demo\Name.class
+com\example\demo\controller\UserController.class

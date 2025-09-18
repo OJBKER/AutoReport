@@ -1,3 +1,25 @@
+/* 首页登录容器样式 */
+.login-container {
+  max-width: 400px;
+  margin: 80px auto;
+  padding: 32px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px #eee;
+  text-align: center;
+}
+button {
+  padding: 10px 24px;
+  background: #24292f;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+}
+button:hover {
+  background: #444c56;
+}
 body { font-family: Arial, sans-serif; margin: 0; background: #f7f8fa; }
 #template_app {
   max-width: 500px;
