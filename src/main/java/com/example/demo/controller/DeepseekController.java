@@ -18,6 +18,10 @@ public class DeepseekController {
 
     @PostMapping("/chat")
     public ResponseEntity<?> chat(@RequestBody Map<String, Object> payload) {
+    // 强制设置response_format为json模式（官方要求为对象）
+    Map<String, Object> responseFormat = new java.util.HashMap<>();
+    responseFormat.put("type", "json_object");
+    payload.put("response_format", responseFormat);
         String url = "https://api.deepseek.com/v1/chat/completions";
         RestTemplate restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
@@ -31,12 +35,28 @@ public class DeepseekController {
             }
             payload.remove("apiKey"); // 移除密钥字段，避免传递到 openai
         }
+        // 强制设置temperature为1.5
+        payload.put("temperature", 1.5);
         headers.set("Authorization", "Bearer " + key);
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
         try {
             String response = restTemplate.postForObject(url, entity, String.class);
-            return ResponseEntity.ok(response);
+            // 只返回message里的json内容
+            String messageContent = response;
+            try {
+                com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response);
+                if (root.has("choices") && root.get("choices").isArray() && root.get("choices").size() > 0) {
+                    com.fasterxml.jackson.databind.JsonNode msg = root.get("choices").get(0).get("message");
+                    if (msg != null && msg.has("content")) {
+                        messageContent = msg.get("content").asText();
+                    }
+                }
+            } catch (Exception parseEx) {
+                // 解析失败则返回原始内容
+            }
+            return ResponseEntity.ok(messageContent);
         } catch (Exception e) {
+            e.printStackTrace(); // 打印详细异常堆栈到控制台
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
         }
     }

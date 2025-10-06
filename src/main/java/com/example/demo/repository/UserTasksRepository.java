@@ -6,4 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface UserTasksRepository extends JpaRepository<UserTasks, Long> {
     // 按用户ID查找任务完成记录
     java.util.List<UserTasks> findByUser_Id(Long userId);
+    
+    // 按任务ID查找用户任务记录
+    java.util.List<UserTasks> findByTask_Id(Long taskId);
 }

@@ -10,7 +10,12 @@
 				</ul>
 			</nav>
 			<div class="avatar-box">
-				<img :src="avatarUrl" alt="avatar" class="avatar" />
+				<img 
+					:src="avatarUrl" 
+					alt="avatar" 
+					class="avatar" 
+					@error="handleImageError"
+				/>
 			</div>
 		</header>
 			<div class="main-content">
@@ -23,20 +28,33 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-const avatarUrl = ref('https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/autoload.png')
+
+// 默认头像
+const defaultAvatarUrl = 'https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget@latest/autoload.png'
+const avatarUrl = ref(defaultAvatarUrl)
 const router = useRouter()
 
 onMounted(async () => {
 	try {
 		const res = await axios.get('/api/user/me', { withCredentials: true })
-		if (res.data && res.data.avatar_url) {
-			avatarUrl.value = res.data.avatar_url
+		if (res.data) {
+			// 优先使用GitHub头像，如果没有则使用默认头像
+			if (res.data.avatarUrl || res.data.avatar_url) {
+				avatarUrl.value = res.data.avatarUrl || res.data.avatar_url
+			} else {
+				avatarUrl.value = defaultAvatarUrl
+			}
 		}
 	} catch (e) {
 		// 未登录，跳转到登录页
 		router.replace('/login')
 	}
 })
+
+// 头像加载失败时使用默认头像
+const handleImageError = () => {
+	avatarUrl.value = defaultAvatarUrl
+}
 </script>
 
 <style scoped>

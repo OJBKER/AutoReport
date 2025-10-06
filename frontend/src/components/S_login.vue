@@ -56,49 +56,12 @@ async function handleLogin() {
 </script>
 
 <style scoped>
-.s-login-container {
-  width: 100%;
-  max-width: 320px;
-  margin: 0 auto;
-  padding: 24px;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
-}
-.form-group {
-  margin-bottom: 18px;
-}
-label {
-  display: block;
-  margin-bottom: 6px;
-  color: #333;
-  font-weight: 500;
-}
-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #d0d7de;
-  border-radius: 4px;
-  font-size: 15px;
-}
-.login-btn {
-  width: 100%;
-  padding: 10px 0;
-  background: #163479;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-top: 8px;
-}
-.login-btn:hover {
-  background: #1d4fa0;
-}
-.error-msg {
-  color: #e74c3c;
-  margin-top: 10px;
-  text-align: center;
-}
+.s-login-container { width:100%; max-width:320px; margin:0 auto; padding: var(--space-6); background: var(--color-surface); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); }
+.form-group { margin-bottom: 18px; }
+label { display:block; margin-bottom:6px; color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+input { width:100%; padding:8px 12px; border:1px solid var(--color-border-strong); border-radius: var(--radius-xs); font-size: var(--font-size-md); background: var(--color-surface); transition: border-color var(--transition-base), box-shadow var(--transition-fast); }
+input:focus { outline:none; border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary), var(--shadow-focus-blue); }
+.login-btn { width:100%; padding:10px 0; background: var(--color-primary-alt); color:#fff; border:none; border-radius: var(--radius-xs); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); cursor:pointer; margin-top: var(--space-2); transition: background var(--transition-base), transform var(--transition-fast); }
+.login-btn:hover { background: var(--color-primary-alt-hover); }
+.error-msg { color: var(--color-red-400); margin-top: var(--space-3); text-align:center; font-size: var(--font-size-sm); }
 </style>

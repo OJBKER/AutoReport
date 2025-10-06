@@ -19,7 +19,7 @@ public class SecurityConfig {
             .csrf().csrfTokenRepository(csrfTokenRepository())
             .and()
             .authorizeRequests()
-                .antMatchers("/", "/login**", "/error", "/webjars/**", "/api/slogin", "/api/user/me", "/api/user-tasks", "/api/tasks", "/api/debug/**", "/csrf").permitAll()
+                .antMatchers("/", "/login**", "/error", "/webjars/**", "/api/slogin", "/api/user/me", "/api/user/bind-student-info", "/api/user-tasks", "/api/tasks", "/api/tasks/**", "/api/classes", "/api/classes/**", "/api/task-submissions", "/api/task-submissions/**", "/api/debug/**", "/csrf").permitAll()
                 .anyRequest().authenticated()
                 .and()
             .oauth2Login()

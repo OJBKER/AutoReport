@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Collections;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.example.demo.repository.UsersRepository;
 import java.util.Optional;
@@ -20,12 +21,16 @@ import com.example.demo.entity.UserTasks;
 import javax.servlet.http.HttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import java.util.Collections;
+import org.springframework.web.bind.annotation.PutMapping;
+import com.example.demo.repository.ClassesRepository;
 
 @RestController
 public class UserController {
     @Autowired
     private UsersRepository usersRepository;
+    
+    @Autowired
+    private ClassesRepository classesRepository;
     
     @PostMapping("/api/slogin")
     public Map<String, Object> sLogin(@RequestBody Map<String, String> body, HttpSession session) {
@@ -47,8 +52,7 @@ public class UserController {
         if (exists) {
             session.setAttribute("studentId", studentId);
             session.setAttribute("password", password);
-            UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken(studentId, null, Collections.emptyList());
+            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(studentId, null, Collections.emptyList());
             SecurityContextHolder.getContext().setAuthentication(auth);
         }
         return result;
@@ -85,11 +89,38 @@ public class UserController {
         
         Optional<Users> userOpt = usersRepository.findByGithubId(githubId);
         if (userOpt.isPresent()) {
+            // 现有用户
             Users user = userOpt.get();
             result.put("userId", user.getId());
+            result.put("githubIdExists", true);
             addClassInfo(result, user);
             addTasksInfo(result, user);
             addUserTasksInfo(result, user);
+        } else {
+            // 首次GitHub登录，自动创建用户记录
+            Users newUser = new Users();
+            newUser.setName(principal.getAttribute("name"));
+            newUser.setGithubId(githubId);
+            // 暂时不设置班级，等待后续绑定
+            newUser.setClasses(null);
+            
+            try {
+                Users savedUser = usersRepository.save(newUser);
+                result.put("userId", savedUser.getId());
+                result.put("githubIdExists", false);
+                result.put("isNewUser", true);
+                result.put("message", "首次GitHub登录，已自动创建账户");
+                
+                // 新用户暂无班级和任务信息
+                result.put("classes", null);
+                result.put("userRelatedTasks", new ArrayList<>());
+                result.put("userTasks", new ArrayList<>());
+            } catch (Exception e) {
+                result.put("githubIdExists", false);
+                result.put("isNewUser", false);
+                result.put("error", "创建用户记录失败");
+                result.put("dbUser", "创建失败");
+            }
         }
         return result;
     }
@@ -174,5 +205,72 @@ public class UserController {
         } else {
             result.put("userTasks", new ArrayList<>());
         }
+    }
+    
+    // GitHub用户绑定学号和班级信息
+    @PutMapping("/api/user/bind-student-info")
+    public Map<String, Object> bindStudentInfo(@RequestBody Map<String, String> body, @AuthenticationPrincipal OAuth2User principal) {
+        Map<String, Object> result = new HashMap<>();
+        
+        if (principal == null) {
+            result.put("success", false);
+            result.put("message", "未登录或非GitHub用户");
+            return result;
+        }
+        
+        String githubId = principal.getAttribute("id").toString();
+        String studentNumber = body.get("studentNumber");
+        String classId = body.get("classId");
+        
+        if (studentNumber == null || classId == null) {
+            result.put("success", false);
+            result.put("message", "学号和班级ID不能为空");
+            return result;
+        }
+        
+        try {
+            // 查找GitHub用户
+            Optional<Users> userOpt = usersRepository.findByGithubId(githubId);
+            if (!userOpt.isPresent()) {
+                result.put("success", false);
+                result.put("message", "用户不存在");
+                return result;
+            }
+            
+            // 检查学号是否已被其他用户使用
+            Optional<Users> existingUserOpt = usersRepository.findByStudentNumberAndPassword(Long.valueOf(studentNumber), null);
+            if (existingUserOpt.isPresent() && !existingUserOpt.get().getGithubId().equals(githubId)) {
+                result.put("success", false);
+                result.put("message", "该学号已被其他用户绑定");
+                return result;
+            }
+            
+            // 查找班级是否存在
+            Optional<Classes> classOpt = classesRepository.findByClassName(classId);
+            if (!classOpt.isPresent()) {
+                result.put("success", false);
+                result.put("message", "班级不存在");
+                return result;
+            }
+            
+            // 更新用户信息
+            Users user = userOpt.get();
+            user.setStudentNumber(Long.valueOf(studentNumber));
+            user.setClasses(classOpt.get());
+            
+            usersRepository.save(user);
+            
+            result.put("success", true);
+            result.put("message", "学号和班级信息绑定成功");
+            result.put("studentNumber", studentNumber);
+            result.put("classId", classId);
+            result.put("className", classOpt.get().getName());
+            
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "绑定失败：" + e.getMessage());
+        }
+        
+        return result;
     }
 }

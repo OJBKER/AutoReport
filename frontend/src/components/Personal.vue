@@ -10,8 +10,6 @@
         <div v-if="user.loginType === 'github'">
           <p><strong>用户ID：</strong>{{ user.id }}</p>
           <p><strong>用户名：</strong>{{ user.login }}</p>
-          <p><strong>昵称：</strong>{{ user.name }}</p>
-          <p><strong>邮箱：</strong>{{ user.email }}</p>
           <p v-if="user.githubId"><strong>GitHub ID：</strong>{{ user.githubId }}</p>
         </div>
         <div v-else-if="user.loginType === 'school'">
@@ -23,7 +21,6 @@
           <p><strong>用户ID：</strong>{{ user.id || user.userId }}</p>
           <p><strong>用户名：</strong>{{ user.login || user.studentId }}</p>
           <p v-if="user.name"><strong>姓名：</strong>{{ user.name }}</p>
-          <p v-if="user.email"><strong>邮箱：</strong>{{ user.email }}</p>
         </div>
       </div>
 
@@ -34,40 +31,81 @@
         <p><strong>班级名称：</strong>{{ user.classes.name }}</p>
       </div>
 
+      <!-- GitHub用户绑定学号和班级 -->
+      <div class="info-section" v-if="user.loginType === 'github' && !user.classes">
+        <h3>绑定学号和班级</h3>
+  <p class="bind-hint">
+          <strong>提示：</strong>请绑定您的学号和班级以享受完整功能
+        </p>
+        
+        <div class="bind-form">
+          <div class="form-group">
+            <label for="studentNumber">学号：</label>
+            <input 
+              type="text" 
+              id="studentNumber"
+              v-model="bindForm.studentNumber" 
+              placeholder="请输入学号"
+              class="form-input"
+              :disabled="binding"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="classId">班级：</label>
+            <select 
+              id="classId"
+              v-model="bindForm.classId" 
+              class="form-select"
+              :disabled="binding"
+            >
+              <option value="">请选择班级</option>
+              <option 
+                v-for="clazz in availableClasses" 
+                :key="clazz.classId" 
+                :value="clazz.classId"
+              >
+                {{ clazz.name }}
+              </option>
+            </select>
+          </div>
+          
+          <div class="form-actions">
+            <button 
+              @click="bindStudentInfo" 
+              class="bind-button"
+              :disabled="binding || !bindForm.studentNumber || !bindForm.classId"
+            >
+              {{ binding ? '绑定中...' : '绑定信息' }}
+            </button>
+          </div>
+          
+          <div v-if="bindMessage" class="bind-message" :class="bindSuccess ? 'success' : 'error'">
+            {{ bindMessage }}
+          </div>
+        </div>
+      </div>
+
       <!-- 登录状态 -->
       <div class="info-section">
         <h3>登录状态</h3>
         <div class="login-info">
-          <span style="color: #409eff; font-size: 15px;">
+          <span class="login-method-text">
             当前登录方式：
             <template v-if="user.loginType === 'github'">GitHub 登录</template>
             <template v-else-if="user.loginType === 'school'">学校账号登录</template>
             <template v-else>未知</template>
           </span>
           <br v-if="user.loginType === 'github'" />
-          <div v-if="user.loginType === 'github'" style="margin-top: 8px;">
-            <span v-if="user.githubIdExists" style="color: #67c23a;">GitHub账号已绑定本地账号</span>
-            <span v-else-if="'githubIdExists' in user" style="color: #e6a23c;">GitHub账号尚未绑定本地账号</span>
+          <div v-if="user.loginType === 'github'" class="github-bind-status">
+            <span v-if="user.classes" class="status-text success">GitHub账号已绑定本地账号</span>
+            <span v-else-if="user.isNewUser" class="status-text warning">新用户，请绑定学号和班级</span>
+            <span v-else class="status-text warning">GitHub账号尚未绑定本地账号</span>
           </div>
-          <div v-if="user.dbUser" style="margin-top: 8px; font-size: 14px; color: #666;">
+          <div v-if="user.dbUser" class="db-status-text">
             数据库状态：{{ user.dbUser }}
           </div>
         </div>
-      </div>
-
-      <!-- 任务完成情况 -->
-      <div class="info-section" v-if="userTasks.length > 0">
-        <h3>任务完成情况</h3>
-        <div v-for="task in userTasks" :key="task.id" class="task-item">
-          <p><strong>任务：</strong>{{ task.task.title }}</p>
-          <p><strong>状态：</strong>{{ task.status }}</p>
-          <p v-if="task.submitTime"><strong>提交时间：</strong>{{ task.submitTime.split('T')[0] }}</p>
-          <p v-if="task.score"><strong>得分：</strong>{{ task.score }}</p>
-        </div>
-      </div>
-      <div class="info-section" v-else>
-        <h3>任务完成情况</h3>
-        <p>暂无任务记录</p>
       </div>
     </div>
     <div v-else>
@@ -78,8 +116,18 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
 const user = ref(null)
-const userTasks = ref([])
+const binding = ref(false)
+const bindMessage = ref('')
+const bindSuccess = ref(false)
+const availableClasses = ref([])
+
+// 绑定表单数据
+const bindForm = ref({
+  studentNumber: '',
+  classId: ''
+})
 
 onMounted(async () => {
   try {
@@ -87,55 +135,106 @@ onMounted(async () => {
     const res = await fetch('/api/user/me', { credentials: 'include' })
     if (res.ok) {
       user.value = await res.json()
-      
-      // 获取用户任务完成情况
-      if (user.value && user.value.userTasks) {
-        userTasks.value = user.value.userTasks
-      }
     }
+    
+    // 获取可用班级列表
+    await loadAvailableClasses()
   } catch (e) {
     console.error('获取用户信息失败:', e)
     user.value = null
   }
 })
+
+// 获取可用班级列表
+const loadAvailableClasses = async () => {
+  try {
+    const res = await fetch('/api/classes', { credentials: 'include' })
+    if (res.ok) {
+      availableClasses.value = await res.json()
+    }
+  } catch (e) {
+    console.error('获取班级列表失败:', e)
+    availableClasses.value = []
+  }
+}
+
+// 绑定学号和班级信息
+const bindStudentInfo = async () => {
+  if (!bindForm.value.studentNumber || !bindForm.value.classId) {
+    bindMessage.value = '请填写完整的学号和班级信息'
+    bindSuccess.value = false
+    return
+  }
+
+  binding.value = true
+  bindMessage.value = ''
+
+  try {
+    const res = await fetch('/api/user/bind-student-info', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        studentNumber: bindForm.value.studentNumber,
+        classId: bindForm.value.classId
+      })
+    })
+
+    const result = await res.json()
+    
+    if (result.success) {
+      bindMessage.value = result.message
+      bindSuccess.value = true
+      
+      // 绑定成功后重新获取用户信息
+      setTimeout(async () => {
+        const userRes = await fetch('/api/user/me', { credentials: 'include' })
+        if (userRes.ok) {
+          user.value = await userRes.json()
+        }
+        bindMessage.value = ''
+      }, 2000)
+    } else {
+      bindMessage.value = result.message || '绑定失败'
+      bindSuccess.value = false
+    }
+  } catch (e) {
+    console.error('绑定失败:', e)
+    bindMessage.value = '网络错误，请稍后重试'
+    bindSuccess.value = false
+  } finally {
+    binding.value = false
+  }
+}
 </script>
 
 <style scoped>
-.personal-container {
-  max-width: 600px;
-  margin: 60px auto;
-  padding: 32px;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px #eee;
-  text-align: left;
-}
-.avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  margin-bottom: 16px;
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
-}
-.info-section {
-  margin-bottom: 24px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border-left: 4px solid #409eff;
-}
-.info-section h3 {
-  margin-top: 0;
-  margin-bottom: 12px;
-  color: #409eff;
-}
-.task-item {
-  background: #fff;
-  padding: 12px;
-  margin-bottom: 8px;
-  border-radius: 4px;
-  border: 1px solid #e0e0e0;
-}
+.personal-container { max-width:600px; margin:60px auto; padding: var(--space-8); background: var(--color-surface); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align:left; }
+.avatar { width:80px; height:80px; border-radius:50%; margin-bottom: var(--space-4); display:block; margin-left:auto; margin-right:auto; }
+.info-section { margin-bottom: var(--space-6); padding: var(--space-4); background: var(--color-gray-75); border-radius: var(--radius-sm); border-left:4px solid var(--color-primary); }
+.info-section h3 { margin-top:0; margin-bottom: var(--space-3); color: var(--color-primary); }
+.bind-hint { color: var(--color-yellow-500); margin-bottom: var(--space-4); font-size: var(--font-size-sm); }
+.login-method-text { color: var(--color-primary); font-size: var(--font-size-md); }
+.github-bind-status { margin-top: var(--space-2); }
+.status-text { font-size: var(--font-size-sm); }
+.status-text.success { color: var(--color-green-550); }
+.status-text.warning { color: var(--color-yellow-500); }
+.db-status-text { margin-top: var(--space-2); font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+/* 绑定表单样式 */
+.bind-form { margin-top: var(--space-4); }
+.form-group { margin-bottom: var(--space-4); }
+.form-group label { display:block; margin-bottom:6px; font-weight: var(--font-weight-medium); color: var(--color-text-primary); font-size: var(--font-size-sm); }
+.form-input, .form-select { width:100%; padding:10px 12px; border:1px solid var(--color-border-strong); border-radius: var(--radius-xs); font-size: var(--font-size-sm); transition: border-color var(--transition-base), box-shadow var(--transition-fast); background: var(--color-surface); box-sizing:border-box; }
+.form-input:focus, .form-select:focus { outline:none; border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary), var(--shadow-focus-blue); }
+.form-input:disabled, .form-select:disabled { background: var(--color-gray-100); color: var(--color-text-muted); cursor:not-allowed; }
+.form-input::placeholder { color: var(--color-text-muted); }
+.form-actions { margin-top:20px; text-align:center; }
+.bind-button { background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%); color:#fff; border:none; padding:12px 32px; border-radius: var(--radius-sm); font-size:16px; font-weight: var(--font-weight-medium); cursor:pointer; transition: all var(--transition-base); box-shadow: 0 2px 8px rgba(64,158,255,0.3); }
+.bind-button:hover:not(:disabled) { background: linear-gradient(135deg, var(--color-primary-hover) 0%, var(--color-primary-alt-hover) 100%); box-shadow: 0 4px 12px rgba(64,158,255,0.4); transform: translateY(-2px); }
+.bind-button:disabled { background: var(--color-gray-400); cursor:not-allowed; box-shadow:none; transform:none; }
+.bind-message { margin-top: var(--space-4); padding: var(--space-3); border-radius: var(--radius-xs); font-size: var(--font-size-sm); text-align:center; font-weight: var(--font-weight-medium); }
+.bind-message.success { background: var(--color-blue-50); color: var(--color-green-550); border:1px solid var(--color-green-border); }
+.bind-message.error { background: var(--color-red-bg); color: var(--color-red-550); border:1px solid var(--color-red-border); }
 </style>
