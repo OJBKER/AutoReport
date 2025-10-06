@@ -10,11 +10,14 @@ npm install<br>
 
 
 
-启动项目:<br>
+启动项目_本地测试:<br>
 1.运行Spring Boot<br>
-mvn spring-boot:run<br>
+mvn clean package
+点击run-oauth2-dev.bat
 2.运行前端开发服务器<br>
-npm run dev<br>
+进入frontend文件夹
+命令npm run dev
+
 
 
 
