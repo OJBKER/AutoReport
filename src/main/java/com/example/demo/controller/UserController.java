@@ -93,6 +93,13 @@ public class UserController {
             Users user = userOpt.get();
             result.put("userId", user.getId());
             result.put("githubIdExists", true);
+            // 返回 studentNumber（可能为空）
+            result.put("studentNumber", user.getStudentNumber());
+            if (user.getStudentNumber() == null) {
+                result.put("needsBinding", true); // 前端可据此提示绑定
+            } else {
+                result.put("needsBinding", false);
+            }
             addClassInfo(result, user);
             addTasksInfo(result, user);
             addUserTasksInfo(result, user);
@@ -110,6 +117,8 @@ public class UserController {
                 result.put("githubIdExists", false);
                 result.put("isNewUser", true);
                 result.put("message", "首次GitHub登录，已自动创建账户");
+                result.put("studentNumber", null);
+                result.put("needsBinding", true);
                 
                 // 新用户暂无班级和任务信息
                 result.put("classes", null);
@@ -126,17 +135,21 @@ public class UserController {
     }
     
     private Map<String, Object> buildSchoolUserResponse(String studentId, String password, Map<String, Object> result) {
-        result.put("studentId", studentId);
+        result.put("studentId", studentId); // 兼容旧字段
         result.put("loginType", "school");
-        
         Optional<Users> userOpt = usersRepository.findByStudentNumberAndPassword(Long.valueOf(studentId), password);
         if (userOpt.isPresent()) {
             Users user = userOpt.get();
             result.put("userId", user.getId());
             result.put("name", user.getName());
+            result.put("studentNumber", user.getStudentNumber());
+            result.put("needsBinding", false);
             addClassInfo(result, user);
             addTasksInfo(result, user);
             addUserTasksInfo(result, user);
+        } else {
+            result.put("studentNumber", null);
+            result.put("needsBinding", true);
         }
         return result;
     }
@@ -196,6 +209,7 @@ public class UserController {
                     taskInfo.put("title", task.getTitle());
                     taskInfo.put("description", task.getDescription());
                     taskInfo.put("deadline", task.getDeadline());
+                    taskInfo.put("templateCode", task.getTemplateCode()); // 让前端按模板匹配可提交任务
                     userTaskInfo.put("task", taskInfo);
                 }
                 

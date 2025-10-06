@@ -24,8 +24,11 @@ public class TaskSubmissions implements Serializable {
     @Column(name = "ai_context_url", columnDefinition = "TEXT")
     private String aiContextUrl; // 存储和AI对话的上下文记录的URL
 
-    @Column(name = "template_type", length = 64)
-    private String templateType; // 模板类型标识（如 software / physics 等）
+    @Column(name = "template_code")
+    private Integer templateCode; // 模板代码（取自模板 JSON 中的 templateCode 数值）
+    
+    @Column(name = "submit")
+    private Boolean submit = false; // 是否已正式提交（false=草稿或未最终提交，true=最终提交）
     
     // 关联到Users表（通过student_number字段）
     @ManyToOne(fetch = FetchType.LAZY)
@@ -40,13 +43,13 @@ public class TaskSubmissions implements Serializable {
     // 构造函数
     public TaskSubmissions() {}
 
-    public TaskSubmissions(String taskUrl, String githubId, String aiContextUrl, Users user, Tasks task, String templateType) {
+    public TaskSubmissions(String taskUrl, String githubId, String aiContextUrl, Users user, Tasks task, Integer templateCode) {
         this.taskUrl = taskUrl;
         this.githubId = githubId;
         this.aiContextUrl = aiContextUrl;
         this.user = user;
         this.task = task;
-        this.templateType = templateType;
+        this.templateCode = templateCode;
         this.updateTime = LocalDateTime.now();
     }
 
@@ -107,12 +110,20 @@ public class TaskSubmissions implements Serializable {
         this.task = task;
     }
 
-    public String getTemplateType() {
-        return templateType;
+    public Integer getTemplateCode() {
+        return templateCode;
     }
 
-    public void setTemplateType(String templateType) {
-        this.templateType = templateType;
+    public void setTemplateCode(Integer templateCode) {
+        this.templateCode = templateCode;
+    }
+    
+    public Boolean getSubmit() {
+        return submit;
+    }
+
+    public void setSubmit(Boolean submit) {
+        this.submit = submit;
     }
     
     // 在保存前自动更新时间

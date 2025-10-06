@@ -18,7 +18,7 @@ import { getCsrfToken } from '../utils/csrf.js'
 
 const props = defineProps({
   formData: { type: Object, default: null },
-  templateType: { type: String, default: null }
+  templateCode: { type: [Number, String], default: null }
 })
 
 const emit = defineEmits(['toast'])
@@ -38,7 +38,7 @@ async function handleExport(previewOnly=false){
     const res = await fetch(url, {
       method:'POST',
       headers:{ 'Content-Type':'application/json','X-CSRF-TOKEN':csrfToken },
-      body: JSON.stringify({ templateType: props.templateType || null, data: props.formData })
+      body: JSON.stringify({ templateCode: props.templateCode!=null?Number(props.templateCode):null, data: props.formData })
     })
     if(!res.ok) throw new Error('HTTP '+res.status)
     if(previewOnly){
@@ -53,7 +53,7 @@ async function handleExport(previewOnly=false){
       const a = document.createElement('a')
       const ts = new Date().toISOString().replace(/[:T]/g,'-').slice(0,19)
       a.href = urlObj
-      a.download = (props.templateType || 'report')+'-'+ts+'.docx'
+  a.download = ((props.templateCode!=null?('C'+props.templateCode):'report'))+'-'+ts+'.docx'
       document.body.appendChild(a)
       a.click()
       a.remove()

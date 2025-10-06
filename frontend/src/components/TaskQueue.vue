@@ -1,83 +1,160 @@
 <template>
-  <div class="task-queue-container">
-    <h1>任务队列</h1>
-    
-    <!-- 任务完成情况 -->
-    <div v-if="user">
-      <div class="info-section" v-if="userTasks.length > 0">
-        <h3>我的任务完成情况</h3>
-        <div v-for="task in userTasks" :key="task.id" class="task-item">
-          <p><strong>任务：</strong>{{ task.task && task.task.title ? task.task.title : '无' }}</p>
-          <p><strong>状态：</strong>{{ task.status ?? '无' }}</p>
-          <p v-if="task.submitTime"><strong>提交时间：</strong>{{ (task.submitTime && task.submitTime.split) ? task.submitTime.split('T')[0] : '' }}</p>
-          <p v-if="task.score"><strong>得分：</strong>{{ task.score }}</p>
-        </div>
-      </div>
-      <div class="info-section" v-else>
-        <h3>我的任务完成情况</h3>
-        <p>暂无任务记录</p>
-      </div>
-      <div class="info-section" v-if="userSubmissions.length > 0">
-        <h3>我的任务提交记录</h3>
-        <div v-for="sub in userSubmissions" :key="sub.id" class="task-item">
-          <p><strong>任务ID：</strong>{{ sub.task ? sub.task.id : '无' }}</p>
-          <p><strong>提交时间：</strong>{{ (sub.updateTime || sub.createTime || '').split('T')[0] }}</p>
-          <p><strong>AI对话历史：</strong>{{ sub.aiContextUrl ? sub.aiContextUrl.slice(0, 100) + '...' : '无' }}</p>
-        </div>
+  <div class="task-queue-wrapper">
+    <div class="tq-header">
+      <h2 class="tq-title">任务队列</h2>
+      <div class="tq-actions">
+        <button class="tq-btn ghost" :disabled="loading" @click="manualRefresh">{{ loading?'刷新中...':'刷新' }}</button>
+        <label class="auto-refresh" :title="'每 '+refreshInterval/1000+' 秒自动刷新'">
+          <input type="checkbox" v-model="autoRefresh" /> 自动
+        </label>
       </div>
     </div>
-    <div v-else>
-      <p>未获取到用户信息，请先登录。</p>
+    <div class="tq-subline" v-if="currentUser">
+      当前用户：<span class="user-tag">{{ currentUser.name || currentUser.login || ('UID '+currentUser.id) }}</span>
+      <span v-if="currentUser.needsBinding" class="bind-warn">(未绑定学号，无法匹配任务)</span>
     </div>
+    <div v-if="error" class="tq-error">{{ error }}</div>
+  <div v-else-if="!loading && tasks.length===0" class="tq-empty">
+    <template v-if="currentUser && currentUser.needsBinding">未绑定学号，暂无任务，请先绑定。</template>
+    <template v-else>暂无任务</template>
+    <span v-if="currentUser" class="debug-id" title="studentNumber / userId">(SN: {{ currentUser.studentNumber || '未绑定' }} / UID: {{ currentUser.id || currentUser.userId }})</span>
+  </div>
+    <ol v-if="tasks.length>0" class="tq-list">
+      <li v-for="t in tasks" :key="t.id" class="tq-item" :class="'st-'+(t.status||'unknown')">
+        <div class="tq-item-main">
+          <div class="tq-line1">
+            <span class="task-title">{{ t.task?.title || ('任务 #'+(t.task?.id||t.id)) }}</span>
+            <span class="status-chip" :class="'s-'+(t.status||'unknown')">{{ t.status || '未知' }}</span>
+          </div>
+          <div class="tq-line2">
+            <span>ID {{ t.id }}</span>
+            <span v-if="t.task?.id">Task {{ t.task.id }}</span>
+            <span v-if="t.score!=null">分数: {{ t.score }}</span>
+            <span v-if="t.submitTime">提交: {{ formatTime(t.submitTime) }}</span>
+            <span v-if="t.updateTime">更新: {{ formatTime(t.updateTime) }}</span>
+          </div>
+        </div>
+      </li>
+    </ol>
+    <div class="tq-footer" v-if="lastFetchTime">最近刷新：{{ formatTime(lastFetchTime) }}</div>
   </div>
 </template>
 
 <script setup>
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 
-import { ref, onMounted } from 'vue'
-import { getCsrfToken } from '../utils/csrf.js'
+const loading = ref(false)
+const error = ref('')
+const tasks = ref([])
+const currentUser = ref(null)
+const lastFetchTime = ref('')
+const autoRefresh = ref(true)
+const refreshInterval = 60000 // 60s
+let timer = null
 
-const user = ref(null)
-const userTasks = ref([])
-const userSubmissions = ref([])
+function formatTime(str){ if(!str) return ''; try { return str.replace('T',' ').substring(0,19) } catch(_) { return str } }
 
-onMounted(async () => {
+async function fetchCurrentUser(){
   try {
-    // 获取 CSRF token
-    const csrfToken = await getCsrfToken()
-    // 获取用户信息
-    const res = await fetch('/api/user/me', {
-      credentials: 'include',
-      headers: { 'X-CSRF-TOKEN': csrfToken }
-    })
-    if (res.ok) {
-      user.value = await res.json()
-      // 获取用户任务完成情况
-      if (user.value && user.value.userTasks) {
-        userTasks.value = user.value.userTasks
-      }
-      // 获取 task_submissions 信息
-      const subRes = await fetch('/api/task-submissions/user', {
-        credentials: 'include',
-        headers: { 'X-CSRF-TOKEN': csrfToken }
-      })
-      if (subRes.ok) {
-        const subData = await subRes.json()
-        if (subData.success && Array.isArray(subData.submissions)) {
-          userSubmissions.value = subData.submissions
-        }
-      }
-    }
-  } catch (e) {
-    console.error('获取用户信息或提交记录失败:', e)
-    user.value = null
+    const res = await fetch('/api/user/me', { credentials:'include' })
+    if(!res.ok) return null
+    const data = await res.json().catch(()=>null)
+    return data && (data.id || data.userId) ? data : null
+  } catch { return null }
+}
+
+async function fetchUserTasks(user){
+  if(!user) return
+  if(user.needsBinding){
+    tasks.value=[]
+    return
   }
-})
+  error.value=''
+  loading.value=true
+  try {
+    const sn = user.studentNumber
+    if(!sn){ throw new Error('未获得 studentNumber') }
+    const queryUrl = `/api/user-tasks?studentNumber=${encodeURIComponent(sn)}`
+    const res = await fetch(queryUrl, { credentials:'include' })
+    if(!res.ok) throw new Error('HTTP '+res.status)
+    const data = await res.json().catch(()=>null)
+    if(!Array.isArray(data)) throw new Error('返回格式不是数组')
+    tasks.value = data.map(d=>({
+      id: d.id,
+      status: d.status || null,
+      score: d.score ?? null,
+      submitTime: d.submitTime || d.submittedAt || null,
+      updateTime: d.updateTime || d.updatedAt || d.submitTime || null,
+      task: d.task ? { id: d.task.id, title: d.task.title } : null
+    }))
+    tasks.value.sort((a,b)=>{
+      const orderStatus = (s)=> s==='未开始'?0 : (s==='进行中'?1 : (s==='已完成'?2:3))
+      const ds = orderStatus(a.status) - orderStatus(b.status)
+      if(ds!==0) return ds
+      const ta = a.submitTime || a.updateTime || ''
+      const tb = b.submitTime || b.updateTime || ''
+      return (tb>ta?1:(tb<ta?-1:0)) || (b.id - a.id)
+    })
+    lastFetchTime.value = new Date().toISOString()
+    if(tasks.value.length===0){ console.info('[TaskQueue] studentNumber='+sn+' 返回空列表'); }
+  } catch(e){
+    error.value = String(e)
+    tasks.value=[]
+  } finally { loading.value=false }
+}
+
+async function init(){
+  loading.value=true
+  currentUser.value = await fetchCurrentUser()
+  await fetchUserTasks(currentUser.value)
+  setupTimer()
+}
+
+function setupTimer(){
+  clearTimer()
+  if(autoRefresh.value){
+    timer = setInterval(()=>{ fetchUserTasks(currentUser.value) }, refreshInterval)
+  }
+}
+function clearTimer(){ if(timer){ clearInterval(timer); timer=null } }
+
+function manualRefresh(){ fetchUserTasks(currentUser.value) }
+
+watch(autoRefresh, ()=> setupTimer())
+onMounted(()=> init())
+onBeforeUnmount(()=> clearTimer())
 </script>
 
 <style scoped>
-.task-queue-container { max-width:600px; margin:60px auto; padding: var(--space-8); background: var(--color-surface); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align:left; }
-.info-section { margin-bottom: var(--space-6); padding: var(--space-4); background: var(--color-gray-75); border-radius: var(--radius-sm); border-left:4px solid var(--color-primary); }
-.info-section h3 { margin-top:0; margin-bottom: var(--space-3); color: var(--color-primary); }
-.task-item { background: var(--color-surface); padding: var(--space-3); margin-bottom: var(--space-2); border-radius: var(--radius-xs); border:1px solid var(--color-border); }
+.task-queue-wrapper { padding:18px 20px 28px; display:flex; flex-direction:column; gap:12px; }
+.tq-header { display:flex; justify-content:space-between; align-items:center; }
+.tq-title { margin:0; font-size:18px; font-weight:600; }
+.tq-actions { display:flex; gap:10px; align-items:center; }
+.tq-btn { padding:6px 14px; background:#409eff; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; }
+.tq-btn.ghost { background:#eef2f6; color:#333; }
+.tq-btn.ghost:hover { background:#dde5ec; }
+.tq-btn:disabled { opacity:.55; cursor:not-allowed; }
+.auto-refresh { font-size:12px; display:flex; align-items:center; gap:4px; user-select:none; }
+.tq-subline { font-size:12px; color:#555; }
+.user-tag { background:#eef2f6; padding:2px 8px; border-radius:12px; }
+.tq-error { color:#d93025; font-size:13px; }
+.tq-empty { font-size:13px; color:#666; padding:12px 4px; }
+.tq-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+.tq-item { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:10px 14px; display:flex; flex-direction:column; gap:4px; position:relative; box-shadow:0 1px 2px rgba(0,0,0,0.04); }
+.tq-item::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; border-radius:4px 0 0 4px; background:linear-gradient(180deg,#60a5fa,#2563eb); opacity:.55; }
+.tq-item.st-已完成::before { background:linear-gradient(180deg,#34d399,#059669); }
+.tq-item.st-进行中::before { background:linear-gradient(180deg,#fde68a,#f59e0b); }
+.tq-item.st-未开始::before { background:linear-gradient(180deg,#cbd5e1,#94a3b8); }
+.tq-line1 { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.task-title { font-size:14px; font-weight:600; color:#1e293b; flex:1; }
+.status-chip { display:inline-block; padding:2px 8px; border-radius:12px; font-size:12px; background:#e2e8f0; color:#1e293b; }
+.status-chip.s-已完成 { background:#d1fae5; color:#065f46; }
+.status-chip.s-进行中 { background:#bfdbfe; color:#1e3a8a; }
+.status-chip.s-未开始 { background:#fef3c7; color:#92400e; }
+.tq-line2 { display:flex; flex-wrap:wrap; gap:14px; font-size:11px; color:#475569; }
+.tq-footer { font-size:11px; color:#64748b; margin-top:6px; }
+@media (max-width:640px){
+  .tq-line2 { flex-direction:column; gap:2px; }
+  .task-title { font-size:13px; }
+}
 </style>

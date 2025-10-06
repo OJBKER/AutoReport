@@ -19,10 +19,5 @@
     { "title": "六、实验步骤", "key": "steps", "type": "list", "default": ["工具使用过程", "新建项目并管理需求", "撰写文档", "……"] },
     { "title": "七、实验结果", "key": "results", "type": "list", "default": ["数据", "图表", "……"] },
     { "title": "八、结果分析与结论", "key": "conclusion", "type": "textarea" }
-  ],
-  "footer": [
-    { "label": "实验评分", "key": "score", "type": "text" },
-    { "label": "指导教师签字", "key": "teacherSign", "type": "text" },
-    { "label": "日期", "key": "signDate", "type": "text" }
   ]
 }

@@ -51,6 +51,7 @@ public class TasksController {
             taskDetail.put("title", task.getTitle());
             taskDetail.put("description", task.getDescription());
             taskDetail.put("deadline", task.getDeadline());
+            taskDetail.put("templateCode", task.getTemplateCode());
             
             // 获取该任务的完成统计
             List<UserTasks> userTasksList = userTasksRepository.findByTask_Id(task.getId());

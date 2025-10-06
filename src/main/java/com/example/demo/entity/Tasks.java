@@ -15,6 +15,9 @@ public class Tasks implements Serializable {
     private String description;
     private LocalDateTime deadline;
 
+    @Column(name = "template_code")
+    private Integer templateCode; // 对应报告模板代码（可为空表示未指定）
+
     @ManyToOne
     @JoinColumn(name = "class_id", referencedColumnName = "class_id")
     private Classes classes;
@@ -24,12 +27,13 @@ public class Tasks implements Serializable {
     private java.util.List<UserTasks> userTasks;
 
     public Tasks() {}
-    public Tasks(Long id, String title, String description, LocalDateTime deadline, Classes classes) {
+    public Tasks(Long id, String title, String description, LocalDateTime deadline, Classes classes, Integer templateCode) {
         this.id = id;
         this.title = title;
         this.description = description;
         this.deadline = deadline;
         this.classes = classes;
+        this.templateCode = templateCode;
     }
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -41,4 +45,6 @@ public class Tasks implements Serializable {
     public void setDeadline(LocalDateTime deadline) { this.deadline = deadline; }
     public Classes getClasses() { return classes; }
     public void setClasses(Classes classes) { this.classes = classes; }
+    public Integer getTemplateCode() { return templateCode; }
+    public void setTemplateCode(Integer templateCode) { this.templateCode = templateCode; }
 }

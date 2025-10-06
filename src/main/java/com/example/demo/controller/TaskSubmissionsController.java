@@ -42,7 +42,26 @@ public class TaskSubmissionsController {
             Long taskId = Long.valueOf(requestBody.get("taskId").toString());
             String taskUrl = (String) requestBody.get("taskUrl");
             String aiContextUrl = (String) requestBody.get("aiContextUrl");
-            String templateType = requestBody.get("templateType") == null ? null : requestBody.get("templateType").toString();
+            Integer templateCode = null;
+            if (requestBody.get("templateCode") != null) {
+                try {
+                    templateCode = Integer.valueOf(requestBody.get("templateCode").toString());
+                } catch (NumberFormatException ignore) {
+                }
+            }
+            Boolean submit = null;
+            if (requestBody.get("submit") != null) {
+                Object sObj = requestBody.get("submit");
+                if (sObj instanceof Boolean) {
+                    submit = (Boolean) sObj;
+                } else if (sObj instanceof String) {
+                    String sv = ((String) sObj).trim().toLowerCase();
+                    if ("true".equals(sv) || "1".equals(sv) || "yes".equals(sv)) submit = true;
+                    else if ("false".equals(sv) || "0".equals(sv) || "no".equals(sv)) submit = false;
+                } else if (sObj instanceof Number) {
+                    submit = ((Number) sObj).intValue() != 0;
+                }
+            }
             
             // 获取当前用户信息
             Users currentUser = getCurrentUser(principal, session);
@@ -71,7 +90,8 @@ public class TaskSubmissionsController {
                 submission.setTaskUrl(taskUrl);
                 submission.setAiContextUrl(aiContextUrl);
                 submission.setUpdateTime(LocalDateTime.now());
-                submission.setTemplateType(templateType);
+                submission.setTemplateCode(templateCode);
+                if (submit != null) submission.setSubmit(submit);
             } else {
                 // 创建新记录
                 submission = new TaskSubmissions();
@@ -80,7 +100,8 @@ public class TaskSubmissionsController {
                 submission.setAiContextUrl(aiContextUrl);
                 submission.setGithubId(currentUser.getGithubId());
                 submission.setUser(currentUser);
-                submission.setTemplateType(templateType);
+                submission.setTemplateCode(templateCode);
+                if (submit != null) submission.setSubmit(submit); // 默认 false，除非显式传入
             }
             
             TaskSubmissions savedSubmission = taskSubmissionsRepository.save(submission);
@@ -251,7 +272,8 @@ public class TaskSubmissionsController {
         m.put("taskUrl", submission.getTaskUrl());
         m.put("aiContextUrl", submission.getAiContextUrl());
     m.put("githubId", submission.getGithubId());
-    m.put("templateType", submission.getTemplateType());
+    m.put("templateCode", submission.getTemplateCode());
+    m.put("submit", submission.getSubmit());
         // 时间字段（容错：实体里可能只有 createTime/updateTime 之一）
     // 目前实体只有 updateTime，createTime 不存在；保留占位键便于前端统一处理
     m.put("createTime", null);

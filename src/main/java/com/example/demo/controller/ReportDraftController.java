@@ -27,6 +27,8 @@ public class ReportDraftController {
     private UsersRepository usersRepository;
     @Autowired
     private TasksRepository tasksRepository;
+    @Autowired
+    private com.example.demo.repository.UserTasksRepository userTasksRepository;
 
     @PostMapping
     public Map<String, Object> saveDraft(@RequestBody Map<String, Object> formData,
@@ -61,10 +63,23 @@ public class ReportDraftController {
             // 单独提取 aiContextUrl，避免重复存储
             Object aiContext = formData.remove("aiContextUrl");
             // 提取模板类型（可选）
-            String templateType = null;
-            if (formData.containsKey("templateType")) {
-                Object tt = formData.get("templateType");
-                templateType = tt == null ? null : tt.toString();
+            Integer templateCode = null;
+            if (formData.containsKey("templateCode")) {
+                Object tc = formData.get("templateCode");
+                if (tc != null) {
+                    try { templateCode = Integer.valueOf(tc.toString()); } catch (NumberFormatException ignore) {}
+                }
+            }
+            // 提交标记（可选）
+            Boolean submit = null;
+            if (formData.containsKey("submit")) {
+                Object sObj = formData.get("submit");
+                if (sObj instanceof Boolean) submit = (Boolean) sObj;
+                else if (sObj instanceof String) {
+                    String sv = ((String) sObj).trim().toLowerCase();
+                    if ("true".equals(sv) || "1".equals(sv) || "yes".equals(sv)) submit = true;
+                    else if ("false".equals(sv) || "0".equals(sv) || "no".equals(sv)) submit = false;
+                } else if (sObj instanceof Number) submit = ((Number) sObj).intValue() != 0;
             }
             // 避免把 id 序列化进 taskUrl 内容（仅用于定位记录）
             formData.remove("id");
@@ -100,12 +115,34 @@ public class ReportDraftController {
             draft.setTask(task); // 可为空代表草稿
             draft.setTaskUrl(jsonContent);
             if (aiContext != null) draft.setAiContextUrl(aiContext.toString());
-            draft.setTemplateType(templateType);
+            draft.setTemplateCode(templateCode);
+            if (submit != null) draft.setSubmit(submit);
             draft.setUpdateTime(LocalDateTime.now());
             TaskSubmissions saved = taskSubmissionsRepository.save(draft);
             result.put("success", true);
             result.put("id", saved.getId());
             result.put("message", isUpdate ? "草稿已更新" : "草稿已新增");
+            // 如果是正式提交（submit=true）且关联了具体任务，则更新 user_tasks 状态
+            if (Boolean.TRUE.equals(draft.getSubmit()) && taskId != null && currentUser.getStudentNumber() != null) {
+                try {
+                    var utOpt = userTasksRepository.findByUser_StudentNumberAndTask_Id(currentUser.getStudentNumber(), taskId);
+                    if (utOpt.isPresent()) {
+                        var ut = utOpt.get();
+                        boolean overwrite = (ut.getStatus() != null && "已完成".equals(ut.getStatus()));
+                        ut.setStatus("已完成"); // 保持已完成
+                        ut.setSubmitTime(LocalDateTime.now()); // 每次覆盖更新提交时间
+                        userTasksRepository.save(ut);
+                        result.put("userTaskUpdated", true);
+                        result.put("userTaskOverwrite", overwrite);
+                    } else {
+                        result.put("userTaskUpdated", false);
+                        result.put("userTaskNote", "未找到匹配的 user_tasks 记录");
+                    }
+                } catch (Exception ex) {
+                    result.put("userTaskUpdated", false);
+                    result.put("userTaskError", ex.getMessage());
+                }
+            }
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", "保存失败: " + e.getMessage());
@@ -154,7 +191,7 @@ public class ReportDraftController {
     // 2) 带 id 参数：返回该草稿的完整内容（含 taskUrl 与 aiContextUrl）
     @GetMapping("/all")
     public Map<String, Object> listAllDrafts(@RequestParam(value = "id", required = false) Long id,
-                                             @RequestParam(value = "templateType", required = false) String templateType,
+                                             @RequestParam(value = "templateCode", required = false) Integer templateCode,
                                              @AuthenticationPrincipal OAuth2User principal,
                                              HttpSession session) {
         Map<String, Object> result = new HashMap<>();
@@ -190,7 +227,8 @@ public class ReportDraftController {
                 draft.put("updateTime", ts.getUpdateTime());
                 draft.put("taskUrl", ts.getTaskUrl());
                 draft.put("aiContextUrl", ts.getAiContextUrl());
-                draft.put("templateType", ts.getTemplateType());
+                draft.put("templateCode", ts.getTemplateCode());
+                draft.put("submit", ts.getSubmit());
                 result.put("success", true);
                 result.put("mode", "detail");
                 result.put("draft", draft);
@@ -201,13 +239,14 @@ public class ReportDraftController {
             var all = taskSubmissionsRepository.findByGithubId(currentUser.getGithubId());
         var drafts = all.stream()
             .filter(ts -> ts.getTask() == null)
-            .filter(ts -> templateType == null || (ts.getTemplateType() != null && ts.getTemplateType().equals(templateType)))
+            .filter(ts -> templateCode == null || (ts.getTemplateCode() != null && ts.getTemplateCode().equals(templateCode)))
                     .sorted((a,b)-> b.getUpdateTime().compareTo(a.getUpdateTime()))
                     .map(ts -> {
                         Map<String,Object> m = new HashMap<>();
                         m.put("id", ts.getId());
                         m.put("updateTime", ts.getUpdateTime());
-                        m.put("templateType", ts.getTemplateType());
+                        m.put("templateCode", ts.getTemplateCode());
+                        m.put("submit", ts.getSubmit());
                         return m; // 不含 taskUrl，点击再取详情
                     }).toList();
             result.put("success", true);

@@ -1,5 +1,8 @@
+com\example\demo\service\ReportExportService$PreviewResult.class
 com\example\demo\DemoApplication.class
+com\example\demo\service\ReportExportService.class
 com\example\demo\controller\TasksController.class
+com\example\demo\controller\ReportExportController.class
 com\example\demo\entity\TaskSubmissions.class
 com\example\demo\controller\UserTasksController.class
 com\example\demo\repository\TasksRepository.class
