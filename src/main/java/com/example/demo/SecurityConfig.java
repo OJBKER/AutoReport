@@ -25,7 +25,7 @@ public class SecurityConfig {
                     "/api/user-tasks", "/api/tasks", "/api/tasks/**",
                     "/api/classes", "/api/classes/**",
                     "/api/task-submissions", "/api/task-submissions/**",
-                    "/api/report/export", "/api/report/export/preview",
+                    "/api/report/export", "/api/report/export/preview", "/api/report/export/preview/html",
                     "/api/debug/**", "/csrf"
                 ).permitAll()
                 .anyRequest().authenticated()

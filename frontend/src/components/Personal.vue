@@ -2,7 +2,7 @@
   <div class="personal-container">
     <h1>个人中心</h1>
     <div v-if="user">
-      <img :src="user.avatar_url" alt="avatar" class="avatar" v-if="user.avatar_url" />
+      <img :src="user.avatar_url || avatarPlaceholder" @error="onAvatarError" alt="avatar" class="avatar" />
       
       <!-- 基本信息 -->
       <div class="info-section">
@@ -116,8 +116,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import http from '@/api/http'
+import avatarPlaceholder from '@/assets/avatar-placeholder.svg'
 
 const user = ref(null)
+function onAvatarError(e){ e.target.src = avatarPlaceholder }
 const binding = ref(false)
 const bindMessage = ref('')
 const bindSuccess = ref(false)
@@ -131,13 +134,8 @@ const bindForm = ref({
 
 onMounted(async () => {
   try {
-    // 获取用户信息
-    const res = await fetch('/api/user/me', { credentials: 'include' })
-    if (res.ok) {
-      user.value = await res.json()
-    }
-    
-    // 获取可用班级列表
+    const { data } = await http.get('/api/user/me')
+    user.value = data
     await loadAvailableClasses()
   } catch (e) {
     console.error('获取用户信息失败:', e)
@@ -148,10 +146,8 @@ onMounted(async () => {
 // 获取可用班级列表
 const loadAvailableClasses = async () => {
   try {
-    const res = await fetch('/api/classes', { credentials: 'include' })
-    if (res.ok) {
-      availableClasses.value = await res.json()
-    }
+    const { data } = await http.get('/api/classes')
+    availableClasses.value = Array.isArray(data)? data : []
   } catch (e) {
     console.error('获取班级列表失败:', e)
     availableClasses.value = []
@@ -170,30 +166,17 @@ const bindStudentInfo = async () => {
   bindMessage.value = ''
 
   try {
-    const res = await fetch('/api/user/bind-student-info', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        studentNumber: bindForm.value.studentNumber,
-        classId: bindForm.value.classId
-      })
+    const { data: result } = await http.put('/api/user/bind-student-info', {
+      studentNumber: bindForm.value.studentNumber,
+      classId: bindForm.value.classId
     })
 
-    const result = await res.json()
-    
     if (result.success) {
       bindMessage.value = result.message
       bindSuccess.value = true
-      
-      // 绑定成功后重新获取用户信息
       setTimeout(async () => {
-        const userRes = await fetch('/api/user/me', { credentials: 'include' })
-        if (userRes.ok) {
-          user.value = await userRes.json()
-        }
+  const { data: refreshed } = await http.get('/api/user/me')
+  user.value = refreshed
         bindMessage.value = ''
       }, 2000)
     } else {

@@ -16,4 +16,20 @@ public interface UserTasksRepository extends JpaRepository<UserTasks, Long> {
 
     // 精确查找：按学号与任务ID
     java.util.Optional<UserTasks> findByUser_StudentNumberAndTask_Id(Long studentNumber, Long taskId);
+
+    // 统计：按班级汇总各状态数量
+    @org.springframework.data.jpa.repository.Query("SELECT ut.status, COUNT(ut) FROM user_tasks ut JOIN ut.user u WHERE u.classes.className = :className GROUP BY ut.status")
+    java.util.List<Object[]> aggregateStatusByClass(@org.springframework.data.repository.query.Param("className") String className);
+
+    // 统计：该班级所有 user_tasks 总数
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(ut) FROM user_tasks ut JOIN ut.user u WHERE u.classes.className = :className")
+    Long countAllByClass(@org.springframework.data.repository.query.Param("className") String className);
+
+    // 统计：按任务分组的完成情况（示例：返回 taskId, status, count）
+    @org.springframework.data.jpa.repository.Query("SELECT ut.task.id, ut.status, COUNT(ut) FROM user_tasks ut JOIN ut.user u WHERE u.classes.className = :className GROUP BY ut.task.id, ut.status")
+    java.util.List<Object[]> aggregateTaskStatusByClass(@org.springframework.data.repository.query.Param("className") String className);
+
+    // 明细：获取某班级全部 user_tasks (返回 ut,user,task)
+    @org.springframework.data.jpa.repository.Query("SELECT ut, u, t FROM user_tasks ut JOIN ut.user u JOIN ut.task t WHERE u.classes.className = :className")
+    java.util.List<Object[]> findDetailsByClass(@org.springframework.data.repository.query.Param("className") String className);
 }

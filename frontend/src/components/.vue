@@ -35,7 +35,7 @@
 <script setup>
 
 import { ref, onMounted } from 'vue'
-import { getCsrfToken } from '../utils/csrf.js'
+import http from '@/api/http'
 
 const user = ref(null)
 const userTasks = ref([])
@@ -43,31 +43,12 @@ const userSubmissions = ref([])
 
 onMounted(async () => {
   try {
-    // 获取 CSRF token
-    const csrfToken = await getCsrfToken()
-    // 获取用户信息
-    const res = await fetch('/api/user/me', {
-      credentials: 'include',
-      headers: { 'X-CSRF-TOKEN': csrfToken }
-    })
-    if (res.ok) {
-      user.value = await res.json()
-      // 获取用户任务完成情况
-      if (user.value && user.value.userTasks) {
-        userTasks.value = user.value.userTasks
-      }
-      // 获取 task_submissions 信息
-      const subRes = await fetch('/api/task-submissions/user', {
-        credentials: 'include',
-        headers: { 'X-CSRF-TOKEN': csrfToken }
-      })
-      if (subRes.ok) {
-        const subData = await subRes.json()
-        if (subData.success && Array.isArray(subData.submissions)) {
-          userSubmissions.value = subData.submissions
-        }
-      }
-    }
+    const { data } = await http.get('/api/user/me')
+    user.value = data
+    if (user.value && user.value.userTasks) userTasks.value = user.value.userTasks
+    const subResp = await http.get('/api/task-submissions/user')
+    const subData = subResp.data
+    if (subData.success && Array.isArray(subData.submissions)) userSubmissions.value = subData.submissions
   } catch (e) {
     console.error('获取用户信息或提交记录失败:', e)
     user.value = null

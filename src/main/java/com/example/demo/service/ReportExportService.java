@@ -123,6 +123,64 @@ public class ReportExportService {
         return pr;
     }
 
+    /** 基于 PreviewResult 生成一个简单的 HTML 预览（不含样式或仅内联基础样式）。 */
+    public String buildHtmlPreview(Integer templateCode, Map<String,Object> data) throws IOException {
+        PreviewResult pr = buildPreview(templateCode, data);
+        StringBuilder sb = new StringBuilder();
+        sb.append("<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"UTF-8\"/>" +
+                "<title>预览-"+escapeHtml(String.valueOf(pr.meta.getOrDefault("templateName","报告预览")))+"</title>" +
+                "<style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;line-height:1.5;padding:24px;background:#f5f7fa;color:#1f2937;}h1{margin:0 0 18px;font-size:22px;}h2{margin:32px 0 12px;font-size:18px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}table{border-collapse:collapse;width:100%;margin:0 0 24px;font-size:14px;}th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left;vertical-align:top;}th{background:#f1f5f9;}ul{margin:6px 0 16px 20px;padding:0;}li{margin:2px 0;}code{background:#e2e8f0;padding:2px 4px;border-radius:4px;font-size:12px;} .empty{color:#94a3b8;font-style:italic;} .footer{margin-top:48px;font-size:12px;color:#64748b;text-align:center;} .section-block{margin-bottom:28px;padding:16px 18px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,0.04);} .badge{display:inline-block;background:#3b82f6;color:#fff;font-size:12px;padding:2px 8px;border-radius:12px;margin-left:8px;} .meta-row{font-size:12px;color:#64748b;margin:0 0 24px;} pre{white-space:pre-wrap;word-break:break-word;} </style></head><body>");
+        sb.append("<h1>"+escapeHtml(String.valueOf(pr.meta.getOrDefault("templateName","实验报告")))+"<span class=\"badge\">预览</span></h1>");
+        sb.append("<div class=\"meta-row\">模板代码: "+pr.meta.get("templateCode")+" ｜ 生成时间: "+escapeHtml(String.valueOf(pr.meta.get("generatedAt")))+"</div>");
+        // Header table
+        if(!pr.header.isEmpty()){
+            sb.append("<table><thead><tr><th style=\"width:160px;\">字段</th><th>内容</th></tr></thead><tbody>");
+            for(Map<String,Object> h: pr.header){
+                sb.append("<tr><td>"+escapeHtml(String.valueOf(h.get("label")))+"</td><td>"+renderValue(h.get("value"))+"</td></tr>");
+            }
+            sb.append("</tbody></table>");
+        }
+        // Sections
+        for(Map<String,Object> s: pr.sections){
+            sb.append("<div class=\"section-block\"><h2>"+escapeHtml(String.valueOf(s.get("title")))+"</h2>");
+            String type = String.valueOf(s.get("type"));
+            Object val = s.get("value");
+            if("list".equalsIgnoreCase(type)){
+                List<String> items = normalizeList(val);
+                if(items.isEmpty()) sb.append("<div class=\"empty\">(未填写)</div>");
+                else { sb.append("<ul>"); for(String it: items){ sb.append("<li>"+escapeHtml(it)+"</li>"); } sb.append("</ul>"); }
+            } else {
+                String text = stringify(val);
+                if(text==null || text.isBlank()) sb.append("<div class=\"empty\">(未填写)</div>");
+                else sb.append("<pre>"+escapeHtml(text)+"</pre>");
+            }
+            sb.append("</div>");
+        }
+        sb.append("<div class=\"footer\">此预览不代表最终 DOCX 排版，仅展示内容结构。</div>");
+        sb.append("</body></html>");
+        return sb.toString();
+    }
+
+    private String escapeHtml(String s){
+        if(s==null) return "";
+        return s.replace("&","&amp;")
+                .replace("<","&lt;")
+                .replace(">","&gt;")
+                .replace("\"","&quot;")
+                .replace("'","&#39;");
+    }
+    private String renderValue(Object v){
+        if(v==null) return "<span class=\"empty\">(未填写)</span>";
+        if(v instanceof List){
+            @SuppressWarnings("unchecked") List<Object> list = (List<Object>) v;
+            if(list.isEmpty()) return "<span class=\"empty\">(未填写)</span>";
+            return list.stream().map(o->escapeHtml(Objects.toString(o,""))).collect(Collectors.joining("<br/>"));
+        }
+        String s = stringify(v);
+        if(s==null || s.isBlank()) return "<span class=\"empty\">(未填写)</span>";
+        return escapeHtml(s);
+    }
+
     /** 导出文档 */
     public byte[] exportDoc(Integer templateCode, Map<String,Object> data) throws IOException {
         PreviewResult pr = buildPreview(templateCode, data);

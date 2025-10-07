@@ -8,6 +8,7 @@ import Personal from '../components/Personal.vue'
 import Assist from '../components/Assist.vue'
 import ClassTasks from '../components/ClassTasks.vue'
 import TaskQueue from '../components/TaskQueue.vue'
+import http from '@/api/http'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -32,22 +33,18 @@ const router = createRouter({
 
 
 // 路由守卫：未登录用户不能访问 /Main 及其子路由
-router.beforeEach((to, from, next) => {
-  const needAuth = to.path.startsWith('/Main') || to.path.startsWith('/admin');
-  if (!needAuth) { return next(); }
-  fetch('/api/user/me', { credentials: 'include' })
-    .then(res => res.json())
-    .then(data => {
-      const loggedIn = data && (data.id || data.userId);
-      if (!loggedIn) { return next('/login'); }
-      if (to.path.startsWith('/admin')) {
-        if (!data.isAdmin) { return next('/Main'); }
-      } else {
-        // 已登录且是管理员：如果访问 /Main 且还没跳去 admin，可在 Main.vue 自己做一次自动跳转，避免这里强制。
-      }
-      next();
-    })
-    .catch(() => next('/login'));
-});
+router.beforeEach(async (to, from, next) => {
+  const needAuth = to.path.startsWith('/Main') || to.path.startsWith('/admin')
+  if (!needAuth) return next()
+  try {
+    const { data } = await http.get('/api/user/me')
+    const loggedIn = data && (data.id || data.userId)
+    if(!loggedIn) return next('/login')
+    if(to.path.startsWith('/admin') && !data.isAdmin) return next('/Main')
+    next()
+  } catch(e){
+    return next('/login')
+  }
+})
 
 export default router

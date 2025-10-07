@@ -83,6 +83,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import http from '@/api/http'
 
 const className = ref('')
 const classId = ref(null)
@@ -92,28 +93,20 @@ const user = ref(null)
 const classStatistics = ref({})
 
 onMounted(async () => {
-  // 获取当前用户信息
-  const userRes = await fetch('/api/user/me', { credentials: 'include' })
-  if (userRes.ok) {
-    user.value = await userRes.json()
-    if (user.value.classes && user.value.classes.classId) {
+  try {
+    const { data: userData } = await http.get('/api/user/me')
+    user.value = userData
+    if (user.value && user.value.classes && user.value.classes.classId) {
       className.value = user.value.classes.name
       classId.value = user.value.classes.classId
-      
-      // 获取用户任务完成情况
-      if (user.value.userTasks) {
-        userTasks.value = user.value.userTasks
-      }
-      
-      // 获取班级任务详细统计信息
-      const taskRes = await fetch(`/api/tasks/detailed?className=${user.value.classes.classId}`, { credentials: 'include' })
-      if (taskRes.ok) {
-        const data = await taskRes.json()
-        tasks.value = data.tasks
-        classStatistics.value = data.classStatistics
+      if (user.value.userTasks) userTasks.value = user.value.userTasks
+      const { data: detail } = await http.get(`/api/tasks/detailed?className=${user.value.classes.classId}`)
+      if (detail) {
+        tasks.value = detail.tasks || []
+        classStatistics.value = detail.classStatistics || {}
       }
     }
-  }
+  } catch(_){}
 })
 
 // 获取任务状态统计

@@ -123,7 +123,7 @@
               <DeepseekTool ref="deepseekRef" :schema="templateSchema" :form-data="currentFormData" @fill="onDeepseekFill" @chat-update="onDeepseekChatUpdate" @error="onDeepseekError" />
             </template>
             <template v-else-if="b.type==='docgen'">
-              <DocGenBlock :form-data="resolveViewer()?.getFormData?.() || null" :template-code="selectedType !== 'none' ? Number(selectedType) : null" @toast="triggerToast" />
+              <DocGenBlock ref="docGenRef" :form-data="resolveViewer()?.getFormData?.() || null" :template-code="selectedType !== 'none' ? Number(selectedType) : null" @toast="triggerToast" />
             </template>
           </div>
         </div>
@@ -169,7 +169,7 @@ import dragSort from '../directives/dragsort.js'
 import JsonViewer from '../template/JsonViewer.vue'
 import DeepseekTool from '../template/DeepseekTool.vue'
 import DocGenBlock from '../template/DocGenBlock.vue'
-import { getCsrfToken } from '../utils/csrf.js'
+import http from '@/api/http'
 import { compressChatHistory, parseMaybeCompressed } from '../utils/chatCompress.js'
 import { useToast } from '../composables/useToast.js'
 import { useAssistLayout } from '../composables/useAssistLayout.js'
@@ -188,12 +188,17 @@ const globalBarVisible = ref(true)
 let mainBarObserver = null
 const assistBarStyle = computed(()=>({ top: (globalBarVisible.value?60:0)+'px' }))
 function observeMainTopBar(){ const header=document.querySelector('header.top-bar'); if(!header){ globalBarVisible.value=false; return } mainBarObserver=new IntersectionObserver(entries=> entries.forEach(e=> globalBarVisible.value=e.isIntersecting), { threshold:[0,0.01,1]}); mainBarObserver.observe(header) }
-async function loadTemplates(){ try { const res=await fetch('/api/report/templates'); if(!res.ok) return; const data=await res.json(); if(data.success){ // 兼容后端仍可能返回 templateType
-  templates.value=(data.templates||[]).map(t=>({
-    ...t,
-    templateCode: t.templateCode != null ? t.templateCode : (t.templateType ? t.templateType : null) // 如果后端暂时只有 templateType，保留原值
-  })).filter(t=>t.templateCode!=null)
-} } catch(_){} }
+async function loadTemplates(){
+  try {
+    const { data } = await http.get('/api/report/templates')
+    if(data && data.success){
+      templates.value=(data.templates||[]).map(t=>({
+        ...t,
+        templateCode: t.templateCode != null ? t.templateCode : (t.templateType ? t.templateType : null)
+      })).filter(t=>t.templateCode!=null)
+    }
+  } catch(_){}
+}
 watch(selectedType,(val)=>{ const meta=templates.value.find(t=>String(t.templateCode)===String(val)); if(meta){ currentTemplateUrl.value=meta.url; if(val!=='none' && !templateLocked.value) templateLocked.value=true } else if(val==='none') currentTemplateUrl.value='' })
 
 // drafts
@@ -243,16 +248,10 @@ async function fetchDrafts(){
   loadingDrafts.value=true;
   draftError.value='';
   try {
-    const csrfToken=await getCsrfToken();
     // 后端不支持 GET /api/report/draft，列表应请求 /api/report/draft/all (无 id -> list mode)
-  const filter = selectedType.value!=="none" ? ('?templateCode='+encodeURIComponent(selectedType.value)) : '';
-    const res=await fetch('/api/report/draft/all'+filter,{ credentials:'include', headers:{'X-CSRF-TOKEN': csrfToken} });
-    if(!res.ok){
-      draftError.value='HTTP '+res.status;
-      drafts.value=[];
-      if(res.status===405) triggerToast('草稿列表接口方式错误(405)：请确认后端仅支持 /draft/all 列表',4000);
-    } else {
-      const data=await res.json();
+    const filter = selectedType.value!=="none" ? ('?templateCode='+encodeURIComponent(selectedType.value)) : '';
+    try {
+      const { data } = await http.get('/api/report/draft/all'+filter)
       if(!data.success){
         draftError.value=data.message||'加载失败';
         drafts.value=[];
@@ -266,6 +265,9 @@ async function fetchDrafts(){
           title:((d.templateCode!=null)?('[C'+d.templateCode+'] '):'')+'草稿 #'+d.id
         }))
       }
+    } catch(err){
+      draftError.value='网络错误: '+err;
+      drafts.value=[];
     }
   } catch(e){
     draftError.value='网络错误: '+e;
@@ -278,10 +280,11 @@ async function fetchWorkItems(){
   if(loadingWork.value) return;
   loadingWork.value=true; workError.value=''; workItems.value=[];
   try {
-    const csrfToken = await getCsrfToken();
-    const res = await fetch('/api/task-submissions/user', { credentials:'include', headers:{'X-CSRF-TOKEN': csrfToken} });
-    if(!res.ok){ workError.value='HTTP '+res.status; loadingWork.value=false; return }
-    const data = await res.json();
+    let data;
+    try {
+      const resp = await http.get('/api/task-submissions/user')
+      data = resp.data
+    } catch(e){ workError.value='网络错误: '+e; loadingWork.value=false; return }
     if(!data.success){ workError.value = data.message || '加载失败'; loadingWork.value=false; return }
     // submissions: 过滤 taskId != null
     const list = (data.submissions||[]).filter(s=> s.taskId != null);
@@ -302,10 +305,11 @@ async function applyWork(w){
   if(!w || applyingWorkId.value) return; applyingWorkId.value = w.id;
   try {
     // 拉取该任务的当前用户提交详情，期望字段: submission.taskUrl (表单 JSON), aiContextUrl (聊天上下文)
-    const csrfToken = await getCsrfToken();
-    const res = await fetch('/api/task-submissions/user/task/'+encodeURIComponent(w.taskId), { credentials:'include', headers:{'X-CSRF-TOKEN': csrfToken} });
-    if(!res.ok){ triggerToast('加载失败 HTTP '+res.status,3000); return }
-    const data = await res.json().catch(()=>null);
+    let data;
+    try {
+      const resp = await http.get('/api/task-submissions/user/task/'+encodeURIComponent(w.taskId))
+      data = resp.data
+    } catch(e){ triggerToast('加载失败: '+e,3000); return }
     if(!data || !data.success || !data.submission){ triggerToast('未找到可恢复内容',3000); return }
     const sub = data.submission;
     // 选择模板（若不同）
@@ -354,7 +358,12 @@ async function applyWork(w){
   } catch(e){ triggerToast('加载异常: '+e,3000) }
   finally { applyingWorkId.value=null }
 }
-async function fetchDraftDetail(id){ const csrfToken=await getCsrfToken(); const res=await fetch('/api/report/draft/all?id='+encodeURIComponent(id), { credentials:'include', headers:{'X-CSRF-TOKEN': csrfToken} }); if(!res.ok) throw new Error('HTTP '+res.status); const data=await res.json(); if(!data.success) throw new Error(data.message||'加载失败'); if(data.mode!=='detail'||!data.draft) throw new Error('返回数据格式不正确'); return data.draft }
+async function fetchDraftDetail(id){
+  const { data } = await http.get('/api/report/draft/all?id='+encodeURIComponent(id))
+  if(!data.success) throw new Error(data.message||'加载失败')
+  if(data.mode!=='detail'||!data.draft) throw new Error('返回数据格式不正确')
+  return data.draft
+}
 function onTemplateLoaded(url){
   if(pendingFillTimer){ clearTimeout(pendingFillTimer); pendingFillTimer=null }
   const inst=resolveViewer();
@@ -452,6 +461,7 @@ const { show: showToast, message: toastMessage, toast: triggerToast, close: clos
 
 // deepseek
 const deepseekRef = ref(null)
+const docGenRef = ref(null)
 const chatHistory = ref([])
 const templateSchema = computed(()=> resolveViewer()?.getTemplateSchema?.() || null)
 // 实时获取当前表单数据（浅拷贝）供 DeepseekTool 参考
@@ -491,7 +501,12 @@ const canSubmitComputed = computed(()=>{
   const disallow = ['completed','done','submitted'];
   return !disallow.includes(String(ut.status).toLowerCase());
 })
-async function fetchUserInfo(){ try { const res=await fetch('/api/user/me',{ credentials:'include'}); if(res.ok){ const data=await res.json(); userInfo.value=data } } catch(e){ /* ignore */ } }
+async function fetchUserInfo(){
+  try {
+    const { data } = await http.get('/api/user/me')
+    if(data) userInfo.value=data
+  } catch(_){}
+}
 const showSubmitMenu = ref(false)
 const submitWrapper = ref(null)
 const submittingTaskId = ref(null)
@@ -507,7 +522,7 @@ const eligibleTasks = computed(()=>{
     .filter(ut=> !disallow.includes(String(ut.status||'').toLowerCase()))
 })
 async function submitSpecificTask(ut){
-  if(submitting.value) return; // 全局阻塞，简单处理
+  if(submitting.value) return;
   const inst=resolveViewer(); const form=inst?.getFormData?.();
   if(!formIsMeaningful(form)){ triggerToast('请先填写内容后再提交'); return }
   if(isCompletedStatus(ut.status)){
@@ -516,18 +531,13 @@ async function submitSpecificTask(ut){
   }
   submitting.value=true; submittingTaskId.value=ut.task.id;
   try {
-    const deep=resolveDeepseek(); const chatCtx = deep?.getChatHistory?.() || chatHistory.value || [];
-    const compressed = compressChatHistory(chatCtx) || JSON.stringify(chatCtx);
-    const csrfToken = await getCsrfToken();
-    const payload = { taskId: ut.task.id, templateCode: ut.task.templateCode ?? (selectedType.value!=='none'?Number(selectedType.value):null), submit: true, ...form, aiContextUrl: compressed };
-    const res = await fetch('/api/report/draft', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':csrfToken}, credentials:'include', body: JSON.stringify(payload) });
-    if(!res.ok){ triggerToast('提交失败 HTTP '+res.status); return }
-    const data = await res.json().catch(()=>null);
+  const deep=resolveDeepseek(); const chatCtx = deep?.getChatHistory?.() || chatHistory.value || [];
+  const compressed = compressChatHistory(chatCtx) || JSON.stringify(chatCtx);
+  const payload = { taskId: ut.task.id, templateCode: ut.task.templateCode ?? (selectedType.value!=='none'?Number(selectedType.value):null), submit: true, ...form, aiContextUrl: compressed };
+  const { data } = await http.post('/api/report/draft', payload);
     if(!data || !data.success){ triggerToast('提交失败: '+(data&&data.message?data.message:'未知错误')); return }
     triggerToast('已提交任务: '+ (ut.task.title||('#'+ut.task.id)) );
-    // 刷新用户信息更新状态
     await fetchUserInfo();
-    // 自动关闭并重置
     showSubmitMenu.value=false;
   } catch(e){ triggerToast('提交异常: '+e, 3000) }
   finally { submitting.value=false; submittingTaskId.value=null; }
@@ -577,39 +587,38 @@ async function saveDraft(){
   const compressed = compressChatHistory(chatCtx) || JSON.stringify(chatCtx);
   const draftData={ id: currentDraftId.value || undefined, templateCode: selectedType.value!=='none'?Number(selectedType.value):null, ...form, aiContextUrl: compressed };
   try {
-    const csrfToken=await getCsrfToken();
-    const res=await fetch('/api/report/draft',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-CSRF-TOKEN':csrfToken},
-      body: JSON.stringify(draftData),
-      credentials:'include'
-    });
-    if(res.ok){
-      let data=null; try { data=await res.json() } catch(_){}
-      // 后端如果返回新草稿 id 或更新时间，尝试刷新本地状态
-      if(data && data.success){
-        if(data.id && !currentDraftId.value){
-          currentDraftId.value = data.id;
-        }
-        // 更新列表条目（若已存在）
-        if(currentDraftId.value){
-          const item = drafts.value.find(d=>d.id===currentDraftId.value);
-          if(item){
-            const now = new Date();
-            const pad=n=>String(n).padStart(2,'0');
-            const fmt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const { data } = await http.post('/api/report/draft', draftData);
+    if(data && data.success){
+      if(data.id && !currentDraftId.value) currentDraftId.value = data.id;
+      if(currentDraftId.value){
+        const item = drafts.value.find(d=>d.id===currentDraftId.value);
+        if(item){
+          const now = new Date();
+          const pad=n=>String(n).padStart(2,'0');
+          const fmt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
             item.updateTimeFmt = fmt;
-          }
         }
       }
-      triggerToast(currentDraftId.value?('草稿已覆盖保存 #'+currentDraftId.value):'草稿已保存！（压缩）');
+      triggerToast(currentDraftId.value?('草稿已覆盖保存 #'+currentDraftId.value):'草稿已保存！');
       updateSnapshot();
+    } else {
+      triggerToast('保存失败',3000);
     }
-    else { triggerToast('保存失败：'+res.status,3000) }
   } catch(e){ triggerToast('网络错误：'+e,3200)}
 }
 
-function scrollToEditor(){ const el=document.querySelector('.assist-container'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); else window.scrollTo({ top:0, behavior:'smooth'}) }
+// 删除草稿
+async function deleteDraft(id){
+  const ok = window.confirm('确认删除草稿 #' + id + ' ?');
+  if(!ok) return;
+  try {
+  const { data } = await http.delete('/api/report/draft', { data:{ id } });
+    if(!data.success){ triggerToast(data.message || '删除失败'); return }
+    drafts.value = drafts.value.filter(d=>d.id!==id);
+    if(currentDraftId.value===id) currentDraftId.value=null;
+    triggerToast('已删除草稿 #'+id);
+  } catch(e){ triggerToast('删除异常: '+e,3000) }
+}
 
 // ===== 重置(重新编辑)逻辑 =====
 const showResetConfirm = ref(false)
@@ -648,8 +657,15 @@ function confirmReset(){
     showDraftMenu.value=false; showWorkMenu.value=false; showSubmitMenu.value=false;
     pendingFill=null; if(pendingFillTimer){ clearTimeout(pendingFillTimer); pendingFillTimer=null }
     lastSnapshotSignature.value='';
-    // 5. 滚动视图归位
-    scrollToEditor();
+    // 5. 重置文档生成预览
+    try { const dg = docGenRef.value; if(dg?.resetPreview) dg.resetPreview(); } catch(_){ }
+    // 6. 滚动视图归位（若定义）
+    if(typeof scrollToEditor === 'function'){
+      try { scrollToEditor(); } catch(_) {}
+    } else {
+      // fallback: 平滑滚动到顶
+      try { window.scrollTo({ top:0, behavior:'smooth' }); } catch(_) { window.scrollTo(0,0); }
+    }
     triggerToast('已恢复初始状态');
   } catch(e){ triggerToast('重置失败: '+e,3000) }
   finally { showResetConfirm.value=false }

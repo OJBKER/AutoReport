@@ -43,6 +43,7 @@
 
 <script setup>
 import { ref, onMounted, defineExpose, watch } from 'vue'
+import http from '@/api/http'
 import autoResize from '../directives/autoresize.js'
 
 const emit = defineEmits(['template-loaded'])
@@ -80,7 +81,16 @@ function confirmBigEditor(){
 }
 function cancelBigEditor(){ showBigEditor.value=false; }
 
-async function loadTemplate(url){ if(!url) return false; try{ const res=await fetch(url+'?_='+Date.now()); if(!res.ok) throw new Error('模板文件获取失败'); const data=await res.json(); jsonData.value=data; form.value={}; fieldTypeMap={}; [...(data.header||[]),...(data.sections||[]),...(data.footer||[])].forEach(f=>{ form.value[f.key]=''; fieldTypeMap[f.key]=f.type }); emit('template-loaded', url); return true } catch(err){ error.value=err.message; return false } }
+async function loadTemplate(url){
+  if(!url) return false;
+  try {
+    // 通过 axios 获取静态 JSON，附加时间戳防缓存
+    const { data } = await http.get(url, { params:{ _: Date.now() } })
+    jsonData.value=data; form.value={}; fieldTypeMap={};
+    [...(data.header||[]),...(data.sections||[]),...(data.footer||[])].forEach(f=>{ form.value[f.key]=''; fieldTypeMap[f.key]=f.type })
+    emit('template-loaded', url); return true
+  } catch(err){ error.value=err.message; return false }
+}
 
 onMounted(() => { if (props.jsonUrl) loadTemplate(props.jsonUrl) })
 watch(() => props.jsonUrl, (nv, ov) => { if (nv && nv !== ov) loadTemplate(nv) })

@@ -42,6 +42,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import http from '@/api/http'
 
 const loading = ref(false)
 const error = ref('')
@@ -56,9 +57,7 @@ function formatTime(str){ if(!str) return ''; try { return str.replace('T',' ').
 
 async function fetchCurrentUser(){
   try {
-    const res = await fetch('/api/user/me', { credentials:'include' })
-    if(!res.ok) return null
-    const data = await res.json().catch(()=>null)
+    const { data } = await http.get('/api/user/me')
     return data && (data.id || data.userId) ? data : null
   } catch { return null }
 }
@@ -74,12 +73,10 @@ async function fetchUserTasks(user){
   try {
     const sn = user.studentNumber
     if(!sn){ throw new Error('未获得 studentNumber') }
-    const queryUrl = `/api/user-tasks?studentNumber=${encodeURIComponent(sn)}`
-    const res = await fetch(queryUrl, { credentials:'include' })
-    if(!res.ok) throw new Error('HTTP '+res.status)
-    const data = await res.json().catch(()=>null)
-    if(!Array.isArray(data)) throw new Error('返回格式不是数组')
-    tasks.value = data.map(d=>({
+  const queryUrl = `/api/user-tasks?studentNumber=${encodeURIComponent(sn)}`
+  const { data } = await http.get(queryUrl)
+  if(!Array.isArray(data)) throw new Error('返回格式不是数组')
+  tasks.value = data.map(d=>({
       id: d.id,
       status: d.status || null,
       score: d.score ?? null,

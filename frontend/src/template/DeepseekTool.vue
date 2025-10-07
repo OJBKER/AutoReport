@@ -37,7 +37,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import autoResize from '../directives/autoresize.js'
-import { getCsrfToken } from '../utils/csrf.js'
+import http from '@/api/http'
 
 /**
  * Props:
@@ -122,7 +122,7 @@ function ensureSystemPrompt(schema){
   chatHistory.value.unshift({role:'system',content:instruction})
 }
 
-function normalizeAiOutput(parsed,schema){ if(!parsed||!schema) return parsed; const allowed=new Set([...(schema.header||[]).map(f=>f.key),...(schema.sections||[]).map(f=>f.key),...(schema.footer||[]).map(f=>f.key),allowedExtraKey]); Object.keys(parsed).forEach(k=>{ if(!allowed.has(k)) delete parsed[k] }); const listKeys=new Set([...(schema.sections||[]).filter(s=>s.type==='list').map(s=>s.key),...(schema.header||[]).filter(h=>h.type==='list').map(h=>h.key),...(schema.footer||[]).filter(f=>f.type==='list').map(f=>f.key)]); for(const key of Object.keys(parsed)){ if(key===allowedExtraKey) continue; const val=parsed[key]; if(listKeys.has(key)){ if(Array.isArray(val)) parsed[key]=val.map(v=>typeof v==='string'?v:JSON.stringify(v)); else if(typeof val==='string') parsed[key]=val.split(/[,，;；\n]/).map(s=>s.trim()).filter(Boolean); else if(val==null) parsed[key]=[]; else parsed[key]=[JSON.stringify(val)]; } else { if(Array.isArray(val)) parsed[key]=val.map(v=>typeof v==='string'?v:JSON.stringify(v)).join('；'); else if(val&&typeof val==='object') parsed[key]=JSON.stringify(val); else if(val==null) parsed[key]=''; } } return parsed }
+function normalizeAiOutput(parsed,schema){ if(!parsed||!schema) return parsed; const allowed=new Set([...(schema.header||[]).map(f=>f.key),...(schema.sections||[]).map(f=>f.key),...(schema.footer||[]).map(f=>f.key),allowedExtraKey]); Object.keys(parsed).forEach(k=>{ if(!allowed.has(k)) delete parsed[k] }); const listKeys=new Set([...(schema.sections||[]).filter(s=>s.type==='list').map(s=>s.key),...(schema.header||[]).filter(h=>h.type==='list').map(h=>f.key),...(schema.footer||[]).filter(f=>f.type==='list').map(f=>f.key)]); for(const key of Object.keys(parsed)){ if(key===allowedExtraKey) continue; const val=parsed[key]; if(listKeys.has(key)){ if(Array.isArray(val)) parsed[key]=val.map(v=>typeof v==='string'?v:JSON.stringify(v)); else if(typeof val==='string') parsed[key]=val.split(/[,，;；\n]/).map(s=>s.trim()).filter(Boolean); else if(val==null) parsed[key]=[]; else parsed[key]=[JSON.stringify(val)]; } else { if(Array.isArray(val)) parsed[key]=val.map(v=>typeof v==='string'?v:JSON.stringify(v)).join('；'); else if(val&&typeof val==='object') parsed[key]=JSON.stringify(val); else if(val==null) parsed[key]=''; } } return parsed }
 
 let runCounter = 0
 function formatTime(ts){ const d=new Date(ts); const pad=n=>String(n).padStart(2,'0'); return `${d.getHours()}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` }
@@ -145,15 +145,9 @@ async function run() {
     const userTs = Date.now()
     history.value.push({ id: ++runCounter, ts: userTs, timeText: formatTime(userTs), content: prompt.value, role: 'user' })
     const payload = { model: props.model, messages: chatHistory.value }
-    const csrfToken = await getCsrfToken()
-    const res = await fetch('/api/deepseek/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
-      body: JSON.stringify(payload),
-      credentials: 'include'
-    })
-    if (!res.ok) throw new Error('请求失败: ' + res.status)
-    const text = await res.text()
+  // 使用 axios http 发送 (拦截器自动附带 CSRF)
+  const { data: rawResponse } = await http.post('/api/deepseek/chat', payload, { responseType:'text' })
+    const text = typeof rawResponse === 'string' ? rawResponse : (rawResponse?.data || JSON.stringify(rawResponse))
     let parsed = null
     const trimmed = text.trim()
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
@@ -202,7 +196,7 @@ async function run() {
       // 不 emit fill，因为没有结构化字段
       const displayText = fallback[allowedExtraKey]
       const ts = Date.now()
-      history.value.push({ id: ++runCounter, ts, timeText: formatTime(ts), content: displayText, role: 'assistant' })
+      history.value.push({ id: ++runCounter, ts: userTs, timeText: formatTime(ts), content: displayText, role: 'assistant' })
     }
   } catch (e) {
     error.value = e.message || String(e)

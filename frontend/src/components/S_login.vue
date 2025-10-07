@@ -19,9 +19,8 @@
 
 
 import { ref } from 'vue'
-import axios from 'axios'
+import http from '@/api/http'
 import { useRouter } from 'vue-router'
-import { getCsrfToken } from '../utils/csrf.js'
 
 const router = useRouter()
 
@@ -33,15 +32,9 @@ async function handleLogin() {
   errorMsg.value = ''
   try {
     // 获取 CSRF token
-    const csrfToken = await getCsrfToken()
-    const res = await axios.post('/api/slogin', {
+    const res = await http.post('/api/slogin', {
       studentId: studentId.value,
       password: password.value
-    }, {
-      headers: {
-        'X-CSRF-TOKEN': csrfToken
-      },
-      withCredentials: true
     })
     if (res.data && res.data.success) {
       // 登录成功

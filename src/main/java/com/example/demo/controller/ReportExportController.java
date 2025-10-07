@@ -49,6 +49,30 @@ public class ReportExportController {
     }
 
     /**
+     * HTML 预览：返回可直接嵌入 iframe 的完整 HTML 字符串。
+     */
+    @PostMapping("/export/preview/html")
+    public ResponseEntity<byte[]> previewHtml(@RequestBody(required = false) Map<String,Object> body) {
+        Map<String,Object> input = body == null ? new HashMap<>() : body;
+        Integer templateCode = toInt(input.get("templateCode"));
+        Map<String,Object> data = safeMap(input.get("data"));
+        try {
+            String html = reportExportService.buildHtmlPreview(templateCode, data);
+            byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.TEXT_HTML);
+            headers.set(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0");
+            headers.setContentLength(bytes.length);
+            return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+        } catch (Exception e) {
+            byte[] err = ("PREVIEW ERROR: "+e.getMessage()).getBytes(StandardCharsets.UTF_8);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.TEXT_PLAIN);
+            return new ResponseEntity<>(err, headers, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
      * 导出接口：返回一个伪 DOCX（二进制字节表示）占位；真实实现应生成并返回 application/vnd.openxmlformats-officedocument.wordprocessingml.document。
      */
     @PostMapping("/export")
