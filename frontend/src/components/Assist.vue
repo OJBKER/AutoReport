@@ -12,7 +12,7 @@
         <span v-else class="template-chip">模板：{{ currentTemplateName }}</span>
       </div>
       <div class="top-bar-right">
-        <button class="top-btn" @click="scrollToEditor">回到编辑</button>
+  <button class="top-btn" @click="openResetConfirm">重新编辑</button>
   <button v-if="selectedType !== 'none'" class="top-btn" @click="saveDraft">保存草稿</button>
         <div v-if="selectedType !== 'none'" class="submit-dropdown-wrapper" ref="submitWrapper">
           <button class="top-btn submit-btn" :disabled="submitting || eligibleTasks.length===0" @click="toggleSubmitMenu">
@@ -135,13 +135,27 @@
         <button class="toast-close" @click="closeToast">×</button>
       </div>
     </transition>
-    <div v-if="showUnsavedConfirm" class="modal-mask">
+    <div v-if="showUnsavedConfirm || showResetConfirm" class="modal-mask">
       <div class="modal-container">
-        <div class="modal-header">提示</div>
-        <div class="modal-body">当前内容尚未保存，继续将丢失未保存的修改，是否继续？</div>
-        <div class="modal-footer">
+        <div class="modal-header">{{ resetModalMode==='unsaved' ? '提示' : '重新编辑确认' }}</div>
+        <div class="modal-body" v-if="resetModalMode==='unsaved'">当前内容尚未保存，继续将丢失未保存的修改，是否继续？</div>
+        <div class="modal-body" v-else>
+          该操作将恢复到初始状态：
+          <ul style="margin:8px 0 0 18px; font-size:13px; line-height:1.5;">
+            <li>清除当前表单内容</li>
+            <li>解除模板锁定并重置为“未选择”</li>
+            <li>清空聊天上下文与草稿挂载状态</li>
+            <li>关闭所有下拉、弹窗状态</li>
+          </ul>
+          是否确认继续？
+        </div>
+        <div class="modal-footer" v-if="resetModalMode==='unsaved'">
           <button class="modal-btn secondary" @click="cancelProceed">取消</button>
           <button class="modal-btn primary" @click="confirmProceed">继续</button>
+        </div>
+        <div class="modal-footer" v-else>
+          <button class="modal-btn secondary" @click="closeResetConfirm">取消</button>
+            <button class="modal-btn primary" @click="confirmReset">确认重置</button>
         </div>
       </div>
     </div>
@@ -287,17 +301,55 @@ async function fetchWorkItems(){
 async function applyWork(w){
   if(!w || applyingWorkId.value) return; applyingWorkId.value = w.id;
   try {
-    // 需要获取完整内容：当前接口已经给了 taskUrl 吗？ user submissions mapSubmission 中包含 taskUrl? 目前未包含，需要再请求 detail 或扩展后端。
-    // 暂时直接追加一个 detail 请求复用草稿接口：若提交时是 submit=true 绑定了 task，taskUrl 已在 task_submissions 中；但当前用户 submissions 输出不含 taskUrl。
-    // 复用已有草稿详情逻辑：直接通过 /api/report/draft/all?id= 但它只接受草稿(task为空)。所以这里需要单独 detail 接口——暂时退化：再调用 /api/task-submissions/user/task/{taskId} 取单条，然后匹配 id。
-    // 为避免额外后端改动，这里简化：提示用户当前实现仅恢复模板选择，正文需手动重新加载(后端未暴露 taskUrl)。
-    if(w.templateCode!=null){
-      if(selectedType.value==='none' || String(selectedType.value)!==String(w.templateCode)){
-        const meta=templates.value.find(t=>String(t.templateCode)===String(w.templateCode));
-        if(meta){ selectedType.value=String(w.templateCode); currentTemplateUrl.value=meta.url; if(!templateLocked.value) templateLocked.value=true }
+    // 拉取该任务的当前用户提交详情，期望字段: submission.taskUrl (表单 JSON), aiContextUrl (聊天上下文)
+    const csrfToken = await getCsrfToken();
+    const res = await fetch('/api/task-submissions/user/task/'+encodeURIComponent(w.taskId), { credentials:'include', headers:{'X-CSRF-TOKEN': csrfToken} });
+    if(!res.ok){ triggerToast('加载失败 HTTP '+res.status,3000); return }
+    const data = await res.json().catch(()=>null);
+    if(!data || !data.success || !data.submission){ triggerToast('未找到可恢复内容',3000); return }
+    const sub = data.submission;
+    // 选择模板（若不同）
+    if(sub.templateCode!=null){
+      if(selectedType.value==='none' || String(selectedType.value)!==String(sub.templateCode)){
+        const meta=templates.value.find(t=>String(t.templateCode)===String(sub.templateCode));
+        if(meta){ selectedType.value=String(sub.templateCode); currentTemplateUrl.value=meta.url; if(!templateLocked.value) templateLocked.value=true }
       }
     }
-    triggerToast('已切换到任务 '+ (w.taskTitle||('#'+w.taskId)) +'（内容回填需后端提供 taskUrl 详情接口）');
+    // 解析表单 JSON（taskUrl 存储的是 JSON 字符串）
+    let parsed=null; if(sub.taskUrl){ try { parsed= JSON.parse(sub.taskUrl) } catch(e){ console.warn('解析 taskUrl 失败', e) } }
+    // 恢复聊天记录
+    if(sub.aiContextUrl){
+      try {
+        const ctx = parseMaybeCompressed(sub.aiContextUrl);
+        if(Array.isArray(ctx)){
+          chatHistory.value = ctx;
+          const deep = resolveDeepseek();
+          if(deep?.restoreFromChatContext) deep.restoreFromChatContext(ctx);
+        }
+      } catch(e){ console.warn('解析聊天上下文失败', e) }
+    }
+    if(parsed){
+      const inst=resolveViewer();
+      if(inst?.fillForm){
+        try { inst.fillForm(parsed); triggerToast('已恢复: '+ (w.taskTitle||('#'+w.taskId))); updateSnapshot(); }
+        catch(e){ triggerToast('回填失败: '+e,3000) }
+      } else {
+        // 模板尚未加载，利用 pendingFill 机制
+        pendingFill={ data: parsed, draftId: 'work-'+sub.id };
+        if(pendingFillTimer){ clearTimeout(pendingFillTimer) }
+        pendingFillTimer = setTimeout(()=>{
+          if(!pendingFill) return;
+          const inst2=resolveViewer();
+          if(inst2?.fillForm){
+            try{ inst2.fillForm(pendingFill.data); triggerToast('已恢复(延迟): '+ (w.taskTitle||('#'+w.taskId))); updateSnapshot(); }
+            catch(err){ triggerToast('延迟回填失败: '+err,3000) }
+            pendingFill=null;
+          }
+        },4000);
+      }
+    } else {
+      triggerToast('该提交未包含可解析内容',3000);
+    }
     showWorkMenu.value=false;
   } catch(e){ triggerToast('加载异常: '+e,3000) }
   finally { applyingWorkId.value=null }
@@ -558,6 +610,61 @@ async function saveDraft(){
 }
 
 function scrollToEditor(){ const el=document.querySelector('.assist-container'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); else window.scrollTo({ top:0, behavior:'smooth'}) }
+
+// ===== 重置(重新编辑)逻辑 =====
+const showResetConfirm = ref(false)
+const resetModalMode = ref('unsaved') // 'unsaved' | 'reset'
+function openResetConfirm(){
+  // 如果有未保存内容，先复用原未保存提示流程
+  if(hasUnsavedContent()){
+    resetModalMode.value='unsaved';
+    showUnsavedConfirm.value=true;
+    pendingOpenDraftMenu=false; // 与草稿打开无关
+  } else {
+    resetModalMode.value='reset';
+    showResetConfirm.value=true;
+  }
+}
+function closeResetConfirm(){ showResetConfirm.value=false }
+function confirmReset(){
+  // 全局重置：表单、模板、聊天、草稿状态、菜单开关
+  try {
+    // 1. 重置模板状态
+    selectedType.value='none';
+    templateLocked.value=false;
+    currentTemplateUrl.value='';
+    // 2. 清空表单 (JsonViewer 组件若提供 clear 接口; fallback: 重新挂载)
+    const inst=resolveViewer();
+    if(inst && inst.clearForm){ inst.clearForm(); }
+    else if(inst && inst.fillForm){ inst.fillForm({}); }
+    // 3. 清空聊天
+    chatHistory.value=[];
+    const deep=resolveDeepseek();
+    if(deep && deep.resetContext) deep.resetContext();
+    // 4. 草稿/继续工作状态
+    currentDraftId.value=null;
+    drafts.value=[]; workItems.value=[];
+    applyingDraftId.value=null; applyingWorkId.value=null;
+    showDraftMenu.value=false; showWorkMenu.value=false; showSubmitMenu.value=false;
+    pendingFill=null; if(pendingFillTimer){ clearTimeout(pendingFillTimer); pendingFillTimer=null }
+    lastSnapshotSignature.value='';
+    // 5. 滚动视图归位
+    scrollToEditor();
+    triggerToast('已恢复初始状态');
+  } catch(e){ triggerToast('重置失败: '+e,3000) }
+  finally { showResetConfirm.value=false }
+}
+// 当未保存提示确认后，如果触发来源是重新编辑，则进入第二层
+const originalConfirmProceed = confirmProceed;
+confirmProceed = function(){
+  // 调用原逻辑（用于草稿菜单打开），然后如果是“重新编辑”场景转入下一步
+  originalConfirmProceed();
+  if(resetModalMode.value==='unsaved' && hasUnsavedContent()==false){
+    // 用户刚刚同意放弃，本次是重置意图
+    resetModalMode.value='reset';
+    showResetConfirm.value=true;
+  }
+}
 
 onMounted(()=>{ loadTemplates(); observeMainTopBar(); loadLayoutFromStorage(); document.addEventListener('keydown', onDocumentKey) })
 onMounted(()=>{ fetchUserInfo(); })

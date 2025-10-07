@@ -38,11 +38,15 @@ onMounted(async () => {
 	try {
 		const res = await axios.get('/api/user/me', { withCredentials: true })
 		if (res.data) {
-			// 优先使用GitHub头像，如果没有则使用默认头像
-			if (res.data.avatarUrl || res.data.avatar_url) {
-				avatarUrl.value = res.data.avatarUrl || res.data.avatar_url
+			const data = res.data
+			if (data.avatarUrl || data.avatar_url) {
+				avatarUrl.value = data.avatarUrl || data.avatar_url
 			} else {
 				avatarUrl.value = defaultAvatarUrl
+			}
+			// 管理员自动跳转到 /admin（避免在 /admin 重复触发）
+			if (data.isAdmin && window.location.pathname !== '/admin') {
+				router.replace('/admin')
 			}
 		}
 	} catch (e) {

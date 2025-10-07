@@ -1,0 +1,101 @@
+{
+  "templateName": "硬件系统实验报告",
+  "templateType": "hardware",
+  "templateCode": 2,
+  "header": [
+    { "label": "实验名称", "key": "experimentName", "type": "text" },
+    { "label": "实验编号", "key": "experimentCode", "type": "text" },
+    { "label": "学号", "key": "studentNumber", "type": "text" },
+    { "label": "姓名", "key": "studentName", "type": "text" },
+    { "label": "指导教师", "key": "teacher", "type": "text" },
+    { "label": "实验地点/实验室", "key": "location", "type": "text" },
+    { "label": "实验日期", "key": "date", "type": "text" }
+  ],
+  "sections": [
+    {
+      "title": "一、实验背景与目的",
+      "key": "purpose",
+      "type": "list",
+      "default": [
+        "了解目标硬件平台的基本结构",
+        "掌握相关接口/总线的使用方法",
+        "熟悉基础调试工具与烧录流程"
+      ]
+    },
+    {
+      "title": "二、实验设备与环境",
+      "key": "environment",
+      "type": "list",
+      "default": [
+        "硬件平台：型号/开发板名称",
+        "核心处理器：如 ARM Cortex-M4 / FPGA 型号",
+        "供电与外设：传感器 / 扩展板 / 通讯模块",
+        "开发工具链：编译器、调试器版本",
+        "操作系统/固件版本（若有）"
+      ]
+    },
+    {
+      "title": "三、相关原理与框图",
+      "key": "principle",
+      "type": "textarea",
+      "default": "可绘制/引用系统框图、时序图、接口连接示意，并说明关键芯片/模块工作原理。"
+    },
+    {
+      "title": "四、实验内容与步骤",
+      "key": "steps",
+      "type": "list",
+      "default": [
+        "硬件连接与连线检查",
+        "工具链/驱动安装与配置",
+        "固件/逻辑代码编写与编译",
+        "下载/烧录与运行验证",
+        "关键测试点观测 (示波器/逻辑分析仪等)",
+        "记录现象与初步结论"
+      ]
+    },
+    {
+      "title": "五、测试方案与数据记录",
+      "key": "testData",
+      "type": "list",
+      "default": [
+        "测试项目 1：目标/条件/结果",
+        "测试项目 2：目标/条件/结果",
+        "……",
+        "原始数据表格或关键测量截图说明"
+      ]
+    },
+    {
+      "title": "六、结果分析",
+      "key": "analysis",
+      "type": "textarea",
+      "default": "对实验数据进行对比、误差分析；解释偏差来源与系统瓶颈。"
+    },
+    {
+      "title": "七、问题与故障排查",
+      "key": "troubleshooting",
+      "type": "list",
+      "default": [
+        "问题 1：现象 / 诊断 / 解决方案",
+        "问题 2：现象 / 诊断 / 解决方案",
+        "通用排查步骤：供电 -> 时钟 -> 复位 -> 引脚映射 -> 外设初始化",
+        "……"
+      ]
+    },
+    {
+      "title": "八、改进建议与总结",
+      "key": "conclusion",
+      "type": "textarea",
+      "default": "总结本次实验收获、硬件平台优缺点，并提出性能/可靠性/可维护性方面的改进方向。"
+    },
+    {
+      "title": "附录 (可选)",
+      "key": "appendix",
+      "type": "list",
+      "default": [
+        "主要参考资料列表",
+        "关键信号波形截图说明",
+        "代码/约束文件片段（精简）"
+      ]
+    }
+  ]
+}

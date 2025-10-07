@@ -96,7 +96,7 @@ public class ReportDraftController {
                 }
                 draft = existingOpt.get();
                 // 校验：必须是当前用户且是草稿（task 为空）
-                if (!currentUser.getGithubId().equals(draft.getGithubId())) {
+                if (!sameUser(currentUser, draft)) {
                     result.put("success", false);
                     result.put("message", "无权限覆盖该草稿");
                     return result;
@@ -164,7 +164,7 @@ public class ReportDraftController {
                 return result;
             }
             // 直接从 repository 取全部后内存过滤（数据量大时应写自定义查询）
-            var all = taskSubmissionsRepository.findByGithubId(currentUser.getGithubId());
+            var all = fetchAllByUser(currentUser);
             var drafts = all.stream()
                     .filter(ts -> ts.getTask() == null)
                     .sorted((a,b)-> b.getUpdateTime().compareTo(a.getUpdateTime()))
@@ -217,7 +217,7 @@ public class ReportDraftController {
                     result.put("message", "该记录不是草稿");
                     return result;
                 }
-                if (!currentUser.getGithubId().equals(ts.getGithubId())) { // 权限校验
+                if (!sameUser(currentUser, ts)) { // 权限校验（支持 githubId 为空）
                     result.put("success", false);
                     result.put("message", "无权限访问该草稿");
                     return result;
@@ -236,7 +236,7 @@ public class ReportDraftController {
             }
 
             // 列表模式
-            var all = taskSubmissionsRepository.findByGithubId(currentUser.getGithubId());
+            var all = fetchAllByUser(currentUser);
         var drafts = all.stream()
             .filter(ts -> ts.getTask() == null)
             .filter(ts -> templateCode == null || (ts.getTemplateCode() != null && ts.getTemplateCode().equals(templateCode)))
@@ -275,5 +275,31 @@ public class ReportDraftController {
             return userOpt.orElse(null);
         }
         return null;
+    }
+
+    // ======== 新增辅助：用户匹配（兼容 githubId 为空） ========
+    private boolean sameUser(Users currentUser, TaskSubmissions ts){
+        if (currentUser == null || ts == null) return false;
+        String g1 = currentUser.getGithubId();
+        String g2 = ts.getGithubId();
+        if (g1 != null && g2 != null) {
+            return g1.equals(g2);
+        }
+        // 至少有一边 githubId 为空时，fallback 使用 学号 比较
+        if (currentUser.getStudentNumber() != null && ts.getUser() != null) {
+            return currentUser.getStudentNumber().equals(ts.getUser().getStudentNumber());
+        }
+        return false;
+    }
+
+    private java.util.List<TaskSubmissions> fetchAllByUser(Users currentUser){
+        if (currentUser == null) return java.util.Collections.emptyList();
+        if (currentUser.getGithubId() != null && !currentUser.getGithubId().isEmpty()) {
+            return taskSubmissionsRepository.findByGithubId(currentUser.getGithubId());
+        }
+        if (currentUser.getStudentNumber() != null) {
+            return taskSubmissionsRepository.findByUser_StudentNumber(currentUser.getStudentNumber());
+        }
+        return java.util.Collections.emptyList();
     }
 }

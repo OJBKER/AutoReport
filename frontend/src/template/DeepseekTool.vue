@@ -252,10 +252,24 @@ function restoreFromChatContext(context){
 }
 
 // 暴露方法供父组件获取状态
-defineExpose({ getChatHistory: () => chatHistory.value, getResultHistory: () => history.value, restoreFromChatContext })
+// 初始暴露延后，与 resetContext 合并
 
 // 运行时状态记录表单签名，用于避免重复注入
 const runState = { lastFormSignature: '' }
+
+// 对外提供重置方法，被父组件在“重新编辑”时调用
+function resetContext(){
+  // 保留最初的 system 指令（如果 autoSystem=true 会在首次 run 前注入；此处直接清空后再在下一次 run 时自动补）
+  chatHistory.value = [ { role: 'system', content: '你是实验报告智能助手，请严格按照json格式回复，不允许json中套用json。' } ];
+  history.value = [];
+  prompt.value = '';
+  result.value = '';
+  error.value = '';
+  runState.lastFormSignature = '';
+}
+
+// 对外暴露能力
+defineExpose({ getChatHistory: () => chatHistory.value, getResultHistory: () => history.value, restoreFromChatContext, resetContext })
 
 </script>
 

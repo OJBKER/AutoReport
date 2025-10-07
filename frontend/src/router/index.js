@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import Login from '../views/Login.vue'
 import Main from '../views/Main.vue'
+import Admin from '../views/Admin.vue'
 
 import Personal from '../components/Personal.vue'
 import Assist from '../components/Assist.vue'
@@ -11,6 +12,7 @@ import TaskQueue from '../components/TaskQueue.vue'
 const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', component: Login },
+  { path: '/admin', component: Admin },
   {
     path: '/Main',
     component: Main,
@@ -31,26 +33,21 @@ const router = createRouter({
 
 // 路由守卫：未登录用户不能访问 /Main 及其子路由
 router.beforeEach((to, from, next) => {
-  // 只保护 /Main 相关路由
-  if (to.path.startsWith('/Main')) {
-    // 检查本地是否有登录状态（可根据实际情况调整）
-    // 这里简单通过调用 /api/user/me 判断
-    fetch('/api/user/me', { credentials: 'include' })
-      .then(res => res.json())
-      .then(data => {
-        // 判断有无有效登录信息（id 或 userId 字段存在即可）
-        if (data && (data.id || data.userId)) {
-          next();
-        } else {
-          next('/login');
-        }
-      })
-      .catch(() => {
-        next('/login');
-      });
-  } else {
-    next();
-  }
+  const needAuth = to.path.startsWith('/Main') || to.path.startsWith('/admin');
+  if (!needAuth) { return next(); }
+  fetch('/api/user/me', { credentials: 'include' })
+    .then(res => res.json())
+    .then(data => {
+      const loggedIn = data && (data.id || data.userId);
+      if (!loggedIn) { return next('/login'); }
+      if (to.path.startsWith('/admin')) {
+        if (!data.isAdmin) { return next('/Main'); }
+      } else {
+        // 已登录且是管理员：如果访问 /Main 且还没跳去 admin，可在 Main.vue 自己做一次自动跳转，避免这里强制。
+      }
+      next();
+    })
+    .catch(() => next('/login'));
 });
 
 export default router

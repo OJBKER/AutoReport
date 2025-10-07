@@ -1,6 +1,6 @@
 {
-  "templateName": "软件需求分析实验报告",
-  "templateType": "software",          
+  "templateName": "软件需求分析实验报告 (兼容测试)",
+  "templateType": "software",
   "templateCode": 1,
   "header": [
     { "label": "实验名称", "key": "experimentName", "type": "text" },

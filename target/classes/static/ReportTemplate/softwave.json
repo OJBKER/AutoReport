@@ -1,0 +1,23 @@
+{
+  "templateName": "软件需求分析实验报告",
+  "templateType": "software",          
+  "templateCode": 1,
+  "header": [
+    { "label": "实验名称", "key": "experimentName", "type": "text" },
+    { "label": "学号", "key": "studentNumber", "type": "text" },
+    { "label": "姓名", "key": "studentName", "type": "text" },
+    { "label": "指导教师", "key": "teacher", "type": "text" },
+    { "label": "实验地点", "key": "location", "type": "text" },
+    { "label": "实验时间", "key": "date", "type": "text" }
+  ],
+  "sections": [
+    { "title": "一、实验需求分析", "key": "experimentNameDetail", "type": "text", "default": "软件需求分析" },
+    { "title": "二、实验目的", "key": "purpose", "type": "list", "default": ["熟悉", "……"] },
+    { "title": "三、实验要求", "key": "requirements", "type": "list", "default": ["完成", "……"] },
+    { "title": "四、实验环境", "key": "environment", "type": "list", "default": ["软件：", "硬件："] },
+    { "title": "五、实验内容", "key": "content", "type": "list", "default": ["需求管理工具使用", "对项目已有功能进行分析", "扩展或修改的功能进行需求分析", "……"] },
+    { "title": "六、实验步骤", "key": "steps", "type": "list", "default": ["工具使用过程", "新建项目并管理需求", "撰写文档", "……"] },
+    { "title": "七、实验结果", "key": "results", "type": "list", "default": ["数据", "图表", "……"] },
+    { "title": "八、结果分析与结论", "key": "conclusion", "type": "textarea" }
+  ]
+}

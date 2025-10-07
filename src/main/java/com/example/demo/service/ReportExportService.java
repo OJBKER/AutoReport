@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.poi.xwpf.usermodel.*;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -33,12 +35,50 @@ public class ReportExportService {
     }
 
     /**
-     * 加载指定 templateCode 的模板 JSON （目前只有一个示例，忽略 code 直接加载固定文件）。
+     * 模板缓存：templateCode -> 资源路径 (classpath 相对路径)。
+     * 说明：
+     *  1. 启动首次加载或第一次调用时扫描 classpath:/static/ReportTemplate/*.json
+     *  2. 每个 JSON 读取其 templateCode（优先），没有则跳过；允许重复 code，后出现的覆盖前者（最后版本生效）
+     *  3. 若找不到目标 code，回退到 legacy 文件 report_template.json（保持测试兼容）
      */
+    private static final Map<Integer,String> TEMPLATE_CACHE = new HashMap<>();
+    private static volatile boolean scanned = false;
+    private static final String BASE_PATTERN = "classpath:/static/ReportTemplate/*.json";
+    private static final String LEGACY_PATH = "static/ReportTemplate/report_template.json";
+
+    private synchronized void scanIfNeeded() throws IOException {
+        if(scanned) return;
+        PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+        Resource[] resources = resolver.getResources(BASE_PATTERN);
+        for(Resource r : resources){
+            if(!r.isReadable()) continue;
+            try(InputStream in = r.getInputStream()){
+                JsonNode root = mapper.readTree(in);
+                JsonNode codeNode = root.get("templateCode");
+                if(codeNode!=null && codeNode.canConvertToInt()){
+                    int code = codeNode.asInt();
+                    // 保存相对路径形式供 ClassPathResource 使用
+                    String filename = Objects.requireNonNull(r.getFilename());
+                    TEMPLATE_CACHE.put(code, "static/ReportTemplate/"+filename);
+                }
+            }catch(Exception ignore){ /* 单个失败忽略 */ }
+        }
+        scanned = true;
+    }
+
     private JsonNode loadTemplate(int templateCode) throws IOException {
-        // 简单：未来可以按 templateCode 拼文件名，这里固定示例
-        ClassPathResource res = new ClassPathResource("static/ReportTemplate/report_template.json");
-        try (InputStream in = res.getInputStream()) {
+        scanIfNeeded();
+        String path = TEMPLATE_CACHE.get(templateCode);
+        if(path == null){
+            // fallback legacy
+            path = LEGACY_PATH;
+        }
+        ClassPathResource res = new ClassPathResource(path);
+        if(!res.exists()){
+            // 最终兜底：抛出明确异常
+            throw new FileNotFoundException("模板未找到 (code="+templateCode+")，尝试路径: "+path);
+        }
+        try(InputStream in = res.getInputStream()){
             return mapper.readTree(in);
         }
     }

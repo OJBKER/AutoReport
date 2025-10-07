@@ -15,6 +15,10 @@ public class Users implements Serializable {
     private String password;
     private String githubId;
     
+    // 是否为管理员账号（默认 false）
+    @Column(name = "is_admin")
+    private Boolean isAdmin = false;
+    
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_id", referencedColumnName = "class_id")
     private Classes classes;
@@ -45,6 +49,9 @@ public class Users implements Serializable {
 
     public String getGithubId() { return githubId; }
     public void setGithubId(String githubId) { this.githubId = githubId; }
+
+    public Boolean getIsAdmin() { return isAdmin; }
+    public void setIsAdmin(Boolean isAdmin) { this.isAdmin = isAdmin; }
 
     public Classes getClasses() { return classes; }
     public void setClasses(Classes classes) { this.classes = classes; }

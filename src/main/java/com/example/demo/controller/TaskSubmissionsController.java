@@ -79,9 +79,18 @@ public class TaskSubmissionsController {
                 return result;
             }
             
-            // 查找是否已存在提交记录（基于学号和任务ID）
-            Optional<TaskSubmissions> existingSubmission = taskSubmissionsRepository
-                .findByTask_IdAndGithubId(taskId, currentUser.getGithubId());
+            // 查找是否已存在提交记录（优先 githubId，若为空则用 studentNumber 作为回退）
+            Optional<TaskSubmissions> existingSubmission;
+            boolean useGithub = currentUser.getGithubId() != null && !currentUser.getGithubId().isEmpty();
+            if (useGithub) {
+                existingSubmission = taskSubmissionsRepository.findByTask_IdAndGithubId(taskId, currentUser.getGithubId());
+            } else {
+                // 对于学校账号（无 githubId），允许多版本历史，因此这里只能取列表再选最新；
+                // 但为了保持与旧逻辑兼容（单记录覆盖），尝试按 学号 获取最新一条
+                List<TaskSubmissions> fallbackHistory = taskSubmissionsRepository
+                        .findAllByTask_IdAndUser_StudentNumberOrderByUpdateTimeDesc(taskId, currentUser.getStudentNumber());
+                existingSubmission = fallbackHistory.isEmpty() ? Optional.empty() : Optional.of(fallbackHistory.get(0));
+            }
             
             TaskSubmissions submission;
             if (existingSubmission.isPresent()) {
@@ -98,7 +107,7 @@ public class TaskSubmissionsController {
                 submission.setTask(taskOpt.get()); // 设置Task关联而不是taskId
                 submission.setTaskUrl(taskUrl);
                 submission.setAiContextUrl(aiContextUrl);
-                submission.setGithubId(currentUser.getGithubId());
+                submission.setGithubId(currentUser.getGithubId()); // 可能为 null（学校账号）
                 submission.setUser(currentUser);
                 submission.setTemplateCode(templateCode);
                 if (submit != null) submission.setSubmit(submit); // 默认 false，除非显式传入
@@ -132,12 +141,13 @@ public class TaskSubmissionsController {
                 return result;
             }
             String githubId = currentUser.getGithubId();
-            if (githubId == null || githubId.isEmpty()) {
-                result.put("success", false);
-                result.put("message", "用户 githubId 为空，无法查询提交记录。");
-                return result;
+            List<TaskSubmissions> submissions;
+            if (githubId != null && !githubId.isEmpty()) {
+                submissions = taskSubmissionsRepository.findByGithubId(githubId);
+            } else {
+                // 回退：按学号查询
+                submissions = taskSubmissionsRepository.findByUser_StudentNumber(currentUser.getStudentNumber());
             }
-            List<TaskSubmissions> submissions = taskSubmissionsRepository.findByGithubId(githubId);
             result.put("success", true);
             result.put("submissions", mapSubmissionList(submissions));
             result.put("count", submissions.size());
@@ -182,13 +192,18 @@ public class TaskSubmissionsController {
                 return result;
             }
             
-            Optional<TaskSubmissions> submission = taskSubmissionsRepository
-                .findByTask_IdAndGithubId(taskId, currentUser.getGithubId());
-            
+            // 使用历史列表取最新，避免 NonUniqueResultException；支持 githubId 为空回退
+            List<TaskSubmissions> history;
+            if (currentUser.getGithubId() != null && !currentUser.getGithubId().isEmpty()) {
+                history = taskSubmissionsRepository.findAllByTaskAndGithubOrderByUpdateTimeDesc(taskId, currentUser.getGithubId());
+            } else {
+                history = taskSubmissionsRepository.findAllByTask_IdAndUser_StudentNumberOrderByUpdateTimeDesc(taskId, currentUser.getStudentNumber());
+            }
             result.put("success", true);
-            result.put("hasSubmission", submission.isPresent());
-            if (submission.isPresent()) {
-                result.put("submission", mapSubmission(submission.get()));
+            result.put("hasSubmission", !history.isEmpty());
+            if(!history.isEmpty()){
+                result.put("submission", mapSubmission(history.get(0))); // 最新
+                result.put("historyCount", history.size());
             }
             
         } catch (Exception e) {

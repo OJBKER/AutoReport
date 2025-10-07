@@ -11,4 +11,7 @@ public interface UsersRepository extends JpaRepository<Users, Long> {
 	
 	// 按班级统计学生数量
 	Long countByClasses_ClassName(String className);
+
+	// 获取同一班级全部用户（用于管理员查看同班级学生）
+	java.util.List<Users> findByClasses_ClassNameOrderByStudentNumberAsc(String className);
 }

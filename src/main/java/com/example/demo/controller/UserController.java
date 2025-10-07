@@ -61,26 +61,30 @@ public class UserController {
     @GetMapping("/api/user/me")
     public Map<String, Object> getCurrentUser(@AuthenticationPrincipal OAuth2User principal, HttpSession session) {
         Map<String, Object> result = new HashMap<>();
-        
-        if (principal != null) {
-            // GitHub OAuth2 用户
-            return buildGitHubUserResponse(principal, result);
+        try {
+            if (principal != null) {
+                // GitHub OAuth2 用户
+                return buildGitHubUserResponse(principal, result);
+            }
+            // 检查学校用户 session
+            Object studentIdObj = session.getAttribute("studentId");
+            Object passwordObj = session.getAttribute("password");
+            if (studentIdObj != null && passwordObj != null) {
+                return buildSchoolUserResponse(studentIdObj.toString(), passwordObj.toString(), result);
+            }
+            result.put("success", false);
+            result.put("error", "No authentication found");
+        } catch (Exception e){
+            result.put("success", false);
+            result.put("error", "Unexpected error: "+ e.getMessage());
         }
-        
-        // 检查学校用户 session
-        Object studentIdObj = session.getAttribute("studentId");
-        Object passwordObj = session.getAttribute("password");
-        if (studentIdObj != null && passwordObj != null) {
-            return buildSchoolUserResponse(studentIdObj.toString(), passwordObj.toString(), result);
-        }
-        
-        result.put("error", "No authentication found");
         return result;
     }
     
     private Map<String, Object> buildGitHubUserResponse(OAuth2User principal, Map<String, Object> result) {
         String githubId = principal.getAttribute("id").toString();
-        result.put("id", githubId);
+    result.put("success", true);
+    result.put("id", githubId);
         result.put("login", principal.getAttribute("login"));
         result.put("name", principal.getAttribute("name"));
         result.put("email", principal.getAttribute("email"));
@@ -93,6 +97,7 @@ public class UserController {
             Users user = userOpt.get();
             result.put("userId", user.getId());
             result.put("githubIdExists", true);
+            result.put("isAdmin", user.getIsAdmin());
             // 返回 studentNumber（可能为空）
             result.put("studentNumber", user.getStudentNumber());
             if (user.getStudentNumber() == null) {
@@ -110,6 +115,8 @@ public class UserController {
             newUser.setGithubId(githubId);
             // 暂时不设置班级，等待后续绑定
             newUser.setClasses(null);
+            // 新建用户默认不是管理员
+            newUser.setIsAdmin(false);
             
             try {
                 Users savedUser = usersRepository.save(newUser);
@@ -127,6 +134,7 @@ public class UserController {
             } catch (Exception e) {
                 result.put("githubIdExists", false);
                 result.put("isNewUser", false);
+                result.put("success", false);
                 result.put("error", "创建用户记录失败");
                 result.put("dbUser", "创建失败");
             }
@@ -135,7 +143,8 @@ public class UserController {
     }
     
     private Map<String, Object> buildSchoolUserResponse(String studentId, String password, Map<String, Object> result) {
-        result.put("studentId", studentId); // 兼容旧字段
+    result.put("success", true);
+    result.put("studentId", studentId); // 兼容旧字段
         result.put("loginType", "school");
         Optional<Users> userOpt = usersRepository.findByStudentNumberAndPassword(Long.valueOf(studentId), password);
         if (userOpt.isPresent()) {
@@ -144,12 +153,14 @@ public class UserController {
             result.put("name", user.getName());
             result.put("studentNumber", user.getStudentNumber());
             result.put("needsBinding", false);
+            result.put("isAdmin", user.getIsAdmin());
             addClassInfo(result, user);
             addTasksInfo(result, user);
             addUserTasksInfo(result, user);
         } else {
             result.put("studentNumber", null);
             result.put("needsBinding", true);
+            result.put("isAdmin", false);
         }
         return result;
     }
