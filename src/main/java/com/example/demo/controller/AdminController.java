@@ -6,8 +6,10 @@ import com.example.demo.repository.UsersRepository;
 import com.example.demo.repository.UserTasksRepository;
 import com.example.demo.repository.TasksRepository;
 import com.example.demo.repository.ClassesRepository;
+import com.example.demo.repository.TaskSubmissionsRepository;
 import com.example.demo.entity.Tasks;
 import com.example.demo.entity.UserTasks;
+import com.example.demo.entity.TaskSubmissions;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,6 +31,99 @@ public class AdminController {
     private TasksRepository tasksRepository;
     @Autowired
     private ClassesRepository classesRepository;
+    @Autowired
+    private TaskSubmissionsRepository taskSubmissionsRepository;
+    // 管理员：按任务查看提交明细（含最新提交内容）
+    @GetMapping("/task-submissions/{taskId}")
+    public Map<String,Object> getTaskSubmissions(@PathVariable Long taskId,
+                                                 HttpSession session,
+                                                 @AuthenticationPrincipal OAuth2User principal) {
+        Map<String,Object> resp = new HashMap<>();
+        Users admin = resolveCurrentUser(session, principal);
+        if (admin == null) { resp.put("success", false); resp.put("error", "NOT_LOGIN"); return resp; }
+        if (admin.getIsAdmin() == null || !admin.getIsAdmin()) { resp.put("success", false); resp.put("error", "NO_PERMISSION"); return resp; }
+        if (admin.getClasses() == null) { resp.put("success", false); resp.put("error", "NO_CLASS_BOUND"); return resp; }
+
+        Optional<Tasks> taskOpt = tasksRepository.findById(taskId);
+        if (taskOpt.isEmpty()) { resp.put("success", false); resp.put("error", "TASK_NOT_FOUND"); return resp; }
+        Tasks task = taskOpt.get();
+        if (task.getClasses() == null || !admin.getClasses().getClassName().equals(task.getClasses().getClassName())) {
+            resp.put("success", false); resp.put("error", "NOT_SAME_CLASS"); return resp; }
+
+        String className = admin.getClasses().getClassName();
+        java.util.List<UserTasks> userTasks = userTasksRepository.findByTask_IdAndUser_Classes_ClassName(taskId, className);
+        java.util.List<Map<String,Object>> data = new ArrayList<>();
+        for (UserTasks ut : userTasks) {
+            Users student = ut.getUser();
+            TaskSubmissions submission = fetchLatestSubmissionFor(ut, student);
+            Map<String,Object> row = new HashMap<>();
+            row.put("userTaskId", ut.getId());
+            row.put("status", ut.getStatus());
+            row.put("score", ut.getScore());
+            row.put("submitTime", ut.getSubmitTime());
+            if (student != null) {
+                row.put("studentNumber", student.getStudentNumber());
+                row.put("studentName", student.getName());
+                row.put("githubId", student.getGithubId());
+            }
+            if (submission != null) {
+                row.put("submissionId", submission.getId());
+                row.put("taskUrl", submission.getTaskUrl());
+                row.put("aiContextUrl", submission.getAiContextUrl());
+                row.put("submissionUpdateTime", submission.getUpdateTime());
+                row.put("submitFlag", submission.getSubmit());
+                row.put("submissionTemplateCode", submission.getTemplateCode());
+            }
+            data.add(row);
+        }
+        resp.put("success", true);
+        resp.put("task", mapTask(task));
+        resp.put("count", data.size());
+        resp.put("data", data);
+        return resp;
+    }
+
+    // 管理员：保存评分
+    @PostMapping("/user-tasks/{userTaskId}/score")
+    @Transactional
+    public Map<String,Object> updateUserTaskScore(@PathVariable Long userTaskId,
+                                                  @RequestBody Map<String,Object> body,
+                                                  HttpSession session,
+                                                  @AuthenticationPrincipal OAuth2User principal) {
+        Map<String,Object> resp = new HashMap<>();
+        Users admin = resolveCurrentUser(session, principal);
+        if (admin == null) { resp.put("success", false); resp.put("error", "NOT_LOGIN"); return resp; }
+        if (admin.getIsAdmin() == null || !admin.getIsAdmin()) { resp.put("success", false); resp.put("error", "NO_PERMISSION"); return resp; }
+        if (admin.getClasses() == null) { resp.put("success", false); resp.put("error", "NO_CLASS_BOUND"); return resp; }
+
+        Optional<UserTasks> utOpt = userTasksRepository.findByIdAndTask_Classes_ClassName(userTaskId, admin.getClasses().getClassName());
+        if (utOpt.isEmpty()) { resp.put("success", false); resp.put("error", "NOT_FOUND"); return resp; }
+
+        UserTasks ut = utOpt.get();
+        Integer score = null;
+        if (body.containsKey("score") && body.get("score") != null) {
+            try {
+                score = Integer.valueOf(body.get("score").toString());
+            } catch (NumberFormatException nfe) {
+                resp.put("success", false);
+                resp.put("error", "INVALID_SCORE");
+                return resp;
+            }
+        }
+        String status = body.get("status") == null ? null : body.get("status").toString();
+        ut.setScore(score);
+        if (status != null && !status.isEmpty()) {
+            ut.setStatus(status);
+        }
+        if (score != null && ut.getSubmitTime() == null) {
+            ut.setSubmitTime(java.time.LocalDateTime.now());
+        }
+        userTasksRepository.save(ut);
+
+        resp.put("success", true);
+        resp.put("data", mapUserTask(ut));
+        return resp;
+    }
 
     // 获取与当前登录管理员同班级的全部学生信息
     @GetMapping("/class-users")
@@ -266,6 +361,43 @@ public class AdminController {
         m.put("templateCode", t.getTemplateCode());
         m.put("classId", t.getClasses() != null ? t.getClasses().getClassName() : null);
         return m;
+    }
+
+    private Map<String,Object> mapUserTask(UserTasks ut) {
+        Map<String,Object> m = new HashMap<>();
+        m.put("id", ut.getId());
+        m.put("status", ut.getStatus());
+        m.put("score", ut.getScore());
+        m.put("submitTime", ut.getSubmitTime());
+        if (ut.getTask() != null) {
+            m.put("task", mapTask(ut.getTask()));
+            m.put("taskId", ut.getTask().getId());
+        }
+        Users student = ut.getUser();
+        if (student != null) {
+            Map<String,Object> stu = new HashMap<>();
+            stu.put("id", student.getId());
+            stu.put("name", student.getName());
+            stu.put("studentNumber", student.getStudentNumber());
+            stu.put("githubId", student.getGithubId());
+            m.put("user", stu);
+        }
+        return m;
+    }
+
+    private TaskSubmissions fetchLatestSubmissionFor(UserTasks ut, Users student) {
+        if (ut == null || ut.getTask() == null || student == null) { return null; }
+        Long taskId = ut.getTask().getId();
+        if (taskId == null) { return null; }
+        if (student.getGithubId() != null && !student.getGithubId().isEmpty()) {
+            java.util.List<TaskSubmissions> list = taskSubmissionsRepository.findAllByTaskAndGithubOrderByUpdateTimeDesc(taskId, student.getGithubId());
+            return list.isEmpty() ? null : list.get(0);
+        }
+        if (student.getStudentNumber() != null) {
+            java.util.List<TaskSubmissions> list = taskSubmissionsRepository.findAllByTask_IdAndUser_StudentNumberOrderByUpdateTimeDesc(taskId, student.getStudentNumber());
+            return list.isEmpty() ? null : list.get(0);
+        }
+        return null;
     }
 
     private String stringVal(Object o){ return o==null? null : o.toString(); }

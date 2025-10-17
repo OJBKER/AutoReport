@@ -1,0 +1,39 @@
+<html><head><meta charset="utf-8" /><title>DB Schema</title></head><body>
+<table border="1" cellspacing="0" cellpadding="4">
+<thead>
+<tr><th>table</th><th>field</th><th>type</th><th>nullable</th><th>primary_key</th><th>description</th></tr>
+</thead>
+<tbody>
+<tr><td>users</td><td>id</td><td>INTEGER (auto increment)</td><td>NO</td><td>YES</td><td>用户内部主键（自增ID）</td></tr>
+<tr><td>users</td><td>name</td><td>TEXT</td><td>YES</td><td>NO</td><td>用户姓名（显示名）</td></tr>
+<tr><td>users</td><td>student_number</td><td>INTEGER</td><td>YES</td><td>NO</td><td>学号 / 学校账号标识</td></tr>
+<tr><td>users</td><td>password</td><td>TEXT</td><td>YES</td><td>NO</td><td>登录密码（应加密/哈希存储）</td></tr>
+<tr><td>users</td><td>github_id</td><td>TEXT</td><td>YES</td><td>NO</td><td>GitHub 帐号 ID / 标识</td></tr>
+<tr><td>users</td><td>is_admin</td><td>BOOLEAN</td><td>YES</td><td>NO</td><td>是否为管理员/教师（布尔，默认 false）</td></tr>
+<tr><td>users</td><td>class_id</td><td>TEXT</td><td>YES</td><td>NO</td><td>所属班级 ID（外键，关联 classes 表）</td></tr>
+<tr><td>classes</td><td>class_id</td><td>TEXT</td><td>NO</td><td>YES</td><td>班级唯一标识（主键）</td></tr>
+<tr><td>classes</td><td>class_name</td><td>TEXT</td><td>YES</td><td>NO</td><td>班级名称（可读名称）</td></tr>
+<tr><td>tasks</td><td>id</td><td>INTEGER (auto increment)</td><td>NO</td><td>YES</td><td>任务主键（自增ID）</td></tr>
+<tr><td>tasks</td><td>title</td><td>TEXT</td><td>YES</td><td>NO</td><td>任务标题</td></tr>
+<tr><td>tasks</td><td>description</td><td>TEXT</td><td>YES</td><td>NO</td><td>任务描述</td></tr>
+<tr><td>tasks</td><td>deadline</td><td>DATETIME</td><td>YES</td><td>NO</td><td>截止时间</td></tr>
+<tr><td>tasks</td><td>template_code</td><td>INTEGER</td><td>YES</td><td>NO</td><td>关联的报告模板代码（可空表示未指定）</td></tr>
+<tr><td>tasks</td><td>class_id</td><td>TEXT</td><td>YES</td><td>NO</td><td>所属班级 ID（外键，关联 classes 表）</td></tr>
+<tr><td>user_tasks</td><td>id</td><td>INTEGER (auto increment)</td><td>NO</td><td>YES</td><td>记录主键（自增ID）</td></tr>
+<tr><td>user_tasks</td><td>user_id</td><td>INTEGER</td><td>YES</td><td>NO</td><td>关联用户（存放学号 student_number，用作外键）</td></tr>
+<tr><td>user_tasks</td><td>task_id</td><td>INTEGER</td><td>YES</td><td>NO</td><td>关联任务（外键）</td></tr>
+<tr><td>user_tasks</td><td>status</td><td>TEXT</td><td>YES</td><td>NO</td><td>提交/完成状态（如：已提交/未提交/已批阅等）</td></tr>
+<tr><td>user_tasks</td><td>submit_time</td><td>DATETIME</td><td>YES</td><td>NO</td><td>提交时间</td></tr>
+<tr><td>user_tasks</td><td>score</td><td>INTEGER</td><td>YES</td><td>NO</td><td>分数或成绩（可空）</td></tr>
+<tr><td>task_submissions</td><td>id</td><td>INTEGER (auto increment)</td><td>NO</td><td>YES</td><td>提交记录主键（自增ID）</td></tr>
+<tr><td>task_submissions</td><td>task_url</td><td>TEXT</td><td>YES</td><td>NO</td><td>提交内容的 URL 或存储链接（文本）</td></tr>
+<tr><td>task_submissions</td><td>github_id</td><td>TEXT</td><td>YES</td><td>NO</td><td>提交者的 GitHub ID（冗余字段）</td></tr>
+<tr><td>task_submissions</td><td>update_time</td><td>DATETIME</td><td>YES</td><td>NO</td><td>最近更新时间（保存/修改时间）</td></tr>
+<tr><td>task_submissions</td><td>ai_context_url</td><td>TEXT</td><td>YES</td><td>NO</td><td>AI 交互/上下文记录的存储 URL</td></tr>
+<tr><td>task_submissions</td><td>template_code</td><td>INTEGER</td><td>YES</td><td>NO</td><td>使用的报告模板代码</td></tr>
+<tr><td>task_submissions</td><td>submit</td><td>BOOLEAN</td><td>YES</td><td>NO</td><td>是否正式提交标志（true/false，默认 false）</td></tr>
+<tr><td>task_submissions</td><td>user_id</td><td>INTEGER</td><td>YES</td><td>NO</td><td>关联用户（存放学号 student_number，外键）</td></tr>
+<tr><td>task_submissions</td><td>task_id</td><td>INTEGER</td><td>YES</td><td>NO</td><td>关联任务 ID（外键）</td></tr>
+</tbody>
+</table>
+</body></html>

@@ -17,12 +17,14 @@
         <ul>
           <li :class="{active:activeTab==='tasks'}" @click="activeTab='tasks'">任务统计</li>
           <li :class="{active:activeTab==='users'}" @click="activeTab='users'">用户列表</li>
+          <li :class="{active:activeTab==='review'}" @click="activeTab='review'">批阅报告</li>
           <li :class="{active:activeTab==='postTask'}" @click="activeTab='postTask'">发布任务</li>
         </ul>
       </nav>
       <main class="admin-main">
         <AdminTaskStats v-if="activeTab==='tasks'" />
         <AdminUserList v-else-if="activeTab==='users'" />
+        <AdminReportReview v-else-if="activeTab==='review'" />
         <AdminPostTask v-else-if="activeTab==='postTask'" />
       </main>
     </div>
@@ -37,6 +39,7 @@ import avatarPlaceholder from '@/assets/avatar-placeholder.svg'
 import AdminPostTask from '@/components/AdminPostTask.vue'
 import AdminTaskStats from '@/components/AdminTaskStats.vue'
 import AdminUserList from '@/components/AdminUserList.vue'
+import AdminReportReview from '@/components/AdminReportReview.vue'
 
 const router = useRouter()
 const activeTab = ref('tasks')

@@ -23,7 +23,7 @@ async function ensureCsrfToken() {
 const http = axios.create({
   baseURL: '/',
   withCredentials: true,
-  timeout: 15000
+  timeout: 60000
 })
 
 http.interceptors.request.use(async (config) => {

@@ -24,7 +24,7 @@
         <div class="tq-item-main">
           <div class="tq-line1">
             <span class="task-title">{{ t.task?.title || ('任务 #'+(t.task?.id||t.id)) }}</span>
-            <span class="status-chip" :class="'s-'+(t.status||'unknown')">{{ t.status || '未知' }}</span>
+            <span class="status-chip" :class="statusClass(t)">{{ statusLabel(t) }}</span>
           </div>
           <div class="tq-line2">
             <span>ID {{ t.id }}</span>
@@ -54,6 +54,16 @@ const refreshInterval = 60000 // 60s
 let timer = null
 
 function formatTime(str){ if(!str) return ''; try { return str.replace('T',' ').substring(0,19) } catch(_) { return str } }
+
+function statusLabel(item){
+  if(item.score != null) return '已批阅'
+  return item.status || '未知'
+}
+
+function statusClass(item){
+  if(item.score != null) return 's-已批阅'
+  return 's-'+(item.status||'unknown')
+}
 
 async function fetchCurrentUser(){
   try {
@@ -148,6 +158,7 @@ onBeforeUnmount(()=> clearTimer())
 .status-chip.s-已完成 { background:#d1fae5; color:#065f46; }
 .status-chip.s-进行中 { background:#bfdbfe; color:#1e3a8a; }
 .status-chip.s-未开始 { background:#fef3c7; color:#92400e; }
+.status-chip.s-已批阅 { background:#ede9fe; color:#5b21b6; }
 .tq-line2 { display:flex; flex-wrap:wrap; gap:14px; font-size:11px; color:#475569; }
 .tq-footer { font-size:11px; color:#64748b; margin-top:6px; }
 @media (max-width:640px){

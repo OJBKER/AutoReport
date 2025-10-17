@@ -21,18 +21,14 @@ public class SecurityConfig {
             .authorizeRequests()
                 .antMatchers(
                     "/", "/login**", "/error", "/webjars/**",
-                    "/api/slogin", "/api/user/me", "/api/user/bind-student-info",
-                    "/api/user-tasks", "/api/tasks", "/api/tasks/**",
-                    "/api/classes", "/api/classes/**",
-                    "/api/task-submissions", "/api/task-submissions/**",
-                    "/api/report/export", "/api/report/export/preview", "/api/report/export/preview/html",
+                    "/api/slogin", 
                     "/api/debug/**", "/csrf"
                 ).permitAll()
                 .anyRequest().authenticated()
                 .and()
             .oauth2Login()
                 // 登录成功后跳转到前端开发服务器 Home 页面
-                .defaultSuccessUrl("http://localhost:5173/Main", true);//生产环境使用/Main
+                .defaultSuccessUrl("http://localhost:5173/Main/personal", true);
         return http.build();
     }
 

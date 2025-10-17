@@ -1,0 +1,31 @@
+table,field,type,nullable,primary_key,description
+users,id,INTEGER (auto increment),NO,YES,用户内部主键（自增ID）
+users,name,TEXT,YES,NO,用户姓名（显示名）
+users,student_number,INTEGER,YES,NO,学号 / 学校账号标识
+users,password,TEXT,YES,NO,登录密码（应加密/哈希存储）
+users,github_id,TEXT,YES,NO,GitHub 帐号 ID / 标识
+users,is_admin,BOOLEAN,YES,NO,是否为管理员/教师（布尔，默认 false）
+users,class_id,TEXT,YES,NO,所属班级 ID（外键，关联 classes 表）
+classes,class_id,TEXT,NO,YES,班级唯一标识（主键）
+classes,class_name,TEXT,YES,NO,班级名称（可读名称）
+tasks,id,INTEGER (auto increment),NO,YES,任务主键（自增ID）
+tasks,title,TEXT,YES,NO,任务标题
+tasks,description,TEXT,YES,NO,任务描述
+tasks,deadline,DATETIME,YES,NO,截止时间
+tasks,template_code,INTEGER,YES,NO,关联的报告模板代码（可空表示未指定）
+tasks,class_id,TEXT,YES,NO,所属班级 ID（外键，关联 classes 表）
+user_tasks,id,INTEGER (auto increment),NO,YES,记录主键（自增ID）
+user_tasks,user_id,INTEGER,YES,NO,关联用户（存放学号 student_number，用作外键）
+user_tasks,task_id,INTEGER,YES,NO,关联任务（外键）
+user_tasks,status,TEXT,YES,NO,提交/完成状态（如：已提交/未提交/已批阅等）
+user_tasks,submit_time,DATETIME,YES,NO,提交时间
+user_tasks,score,INTEGER,YES,NO,分数或成绩（可空）
+task_submissions,id,INTEGER (auto increment),NO,YES,提交记录主键（自增ID）
+task_submissions,task_url,TEXT,YES,NO,提交内容的 URL 或存储链接（文本）
+task_submissions,github_id,TEXT,YES,NO,提交者的 GitHub ID（冗余字段）
+task_submissions,update_time,DATETIME,YES,NO,最近更新时间（保存/修改时间）
+task_submissions,ai_context_url,TEXT,YES,NO,AI 交互/上下文记录的存储 URL
+task_submissions,template_code,INTEGER,YES,NO,使用的报告模板代码
+task_submissions,submit,BOOLEAN,YES,NO,是否正式提交标志（true/false，默认 false）
+task_submissions,user_id,INTEGER,YES,NO,关联用户（存放学号 student_number，外键）
+task_submissions,task_id,INTEGER,YES,NO,关联任务 ID（外键）

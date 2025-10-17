@@ -16,6 +16,22 @@
           <p><strong>学号：</strong>{{ user.studentId }}</p>
           <p v-if="user.name"><strong>姓名：</strong>{{ user.name }}</p>
           <p v-if="user.userId"><strong>用户ID：</strong>{{ user.userId }}</p>
+          <p v-if="user.githubId"><strong>GitHub ID：</strong>{{ user.githubId }}</p>
+          <div class="github-bind-area">
+            <template v-if="user.canBindGithub">
+              <button
+                class="github-bind-button"
+                @click="startGithubBind"
+                :disabled="githubBindLoading"
+              >
+                {{ githubBindLoading ? '跳转 GitHub 授权中...' : '绑定 GitHub 账号' }}
+              </button>
+              <p v-if="githubBindMessage" class="github-bind-message">{{ githubBindMessage }}</p>
+            </template>
+            <template v-else-if="user.githubId">
+              <span class="github-bind-message success">GitHub 账号已绑定</span>
+            </template>
+          </div>
         </div>
         <div v-else>
           <p><strong>用户ID：</strong>{{ user.id || user.userId }}</p>
@@ -125,6 +141,18 @@ const binding = ref(false)
 const bindMessage = ref('')
 const bindSuccess = ref(false)
 const availableClasses = ref([])
+const githubBindLoading = ref(false)
+const githubBindMessage = ref('')
+
+const resolveRedirectUrl = (url) => {
+  if (!url) return null
+  if (/^https?:\/\//i.test(url)) return url
+  const origin = window.location.origin
+  const isDev = origin.includes(':5173')
+  const backendOrigin = isDev ? origin.replace(':5173', ':8080') : origin
+  if (url.startsWith('/')) return `${backendOrigin}${url}`
+  return `${backendOrigin}/${url}`
+}
 
 // 绑定表单数据
 const bindForm = ref({
@@ -136,6 +164,7 @@ onMounted(async () => {
   try {
     const { data } = await http.get('/api/user/me')
     user.value = data
+    githubBindMessage.value = data.githubBindMessage || ''
     await loadAvailableClasses()
   } catch (e) {
     console.error('获取用户信息失败:', e)
@@ -191,6 +220,30 @@ const bindStudentInfo = async () => {
     binding.value = false
   }
 }
+
+const startGithubBind = async () => {
+  githubBindMessage.value = ''
+  githubBindLoading.value = true
+  try {
+    const { data } = await http.post('/api/user/request-github-bind')
+    if (data.success && data.redirectUrl) {
+      githubBindMessage.value = '正在跳转至 GitHub 授权...'
+      const targetUrl = resolveRedirectUrl(data.redirectUrl)
+      if (targetUrl) {
+        window.location.href = targetUrl
+      } else {
+        githubBindMessage.value = '无法解析跳转地址'
+      }
+    } else {
+      githubBindMessage.value = data.message || '无法发起 GitHub 绑定'
+    }
+  } catch (e) {
+    console.error('发起 GitHub 绑定失败:', e)
+    githubBindMessage.value = '网络错误，请稍后重试'
+  } finally {
+    githubBindLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -220,4 +273,10 @@ const bindStudentInfo = async () => {
 .bind-message { margin-top: var(--space-4); padding: var(--space-3); border-radius: var(--radius-xs); font-size: var(--font-size-sm); text-align:center; font-weight: var(--font-weight-medium); }
 .bind-message.success { background: var(--color-blue-50); color: var(--color-green-550); border:1px solid var(--color-green-border); }
 .bind-message.error { background: var(--color-red-bg); color: var(--color-red-550); border:1px solid var(--color-red-border); }
+.github-bind-area { margin-top: var(--space-3); }
+.github-bind-button { background: var(--color-surface); border:1px solid var(--color-primary); color: var(--color-primary); padding:10px 16px; border-radius: var(--radius-xs); font-size: var(--font-size-sm); cursor:pointer; transition: all var(--transition-fast); }
+.github-bind-button:hover:not(:disabled) { background: var(--color-primary); color:#fff; }
+.github-bind-button:disabled { opacity:0.6; cursor:not-allowed; }
+.github-bind-message { margin-top: var(--space-2); font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.github-bind-message.success { color: var(--color-green-550); }
 </style>

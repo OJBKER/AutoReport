@@ -23,6 +23,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PutMapping;
 import com.example.demo.repository.ClassesRepository;
+import javax.servlet.http.HttpServletRequest;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @RestController
 public class UserController {
@@ -64,7 +66,7 @@ public class UserController {
         try {
             if (principal != null) {
                 // GitHub OAuth2 用户
-                return buildGitHubUserResponse(principal, result);
+                return buildGitHubUserResponse(principal, result, session);
             }
             // 检查学校用户 session
             Object studentIdObj = session.getAttribute("studentId");
@@ -81,15 +83,53 @@ public class UserController {
         return result;
     }
     
-    private Map<String, Object> buildGitHubUserResponse(OAuth2User principal, Map<String, Object> result) {
+    private Map<String, Object> buildGitHubUserResponse(OAuth2User principal, Map<String, Object> result, HttpSession session) {
         String githubId = principal.getAttribute("id").toString();
-    result.put("success", true);
-    result.put("id", githubId);
+        result.put("success", true);
+        result.put("id", githubId);
+        result.put("githubId", githubId);
         result.put("login", principal.getAttribute("login"));
         result.put("name", principal.getAttribute("name"));
         result.put("email", principal.getAttribute("email"));
         result.put("avatarUrl", principal.getAttribute("avatar_url"));
         result.put("loginType", "github");
+
+        Object pendingBindObj = session.getAttribute("pendingBindStudentNumber");
+        if (pendingBindObj != null) {
+            try {
+                String pendingStudentNumber = pendingBindObj.toString();
+                Optional<Users> pendingUserOpt = usersRepository.findByStudentNumber(Long.valueOf(pendingStudentNumber));
+                if (pendingUserOpt.isPresent()) {
+                    Users pendingUser = pendingUserOpt.get();
+                    Optional<Users> existingGithubUser = usersRepository.findByGithubId(githubId);
+                    if (existingGithubUser.isPresent() && !existingGithubUser.get().getId().equals(pendingUser.getId())) {
+                        result.put("githubBindCompleted", false);
+                        result.put("githubBindMessage", "该GitHub账号已绑定其他用户");
+                    } else {
+                        pendingUser.setGithubId(githubId);
+                        String principalName = principal.getAttribute("name");
+                        if ((pendingUser.getName() == null || pendingUser.getName().isEmpty()) && principalName != null) {
+                            pendingUser.setName(principalName);
+                        }
+                        usersRepository.save(pendingUser);
+                        session.setAttribute("studentId", pendingStudentNumber);
+                        if (pendingUser.getPassword() != null) {
+                            session.setAttribute("password", pendingUser.getPassword());
+                        }
+                        result.put("githubBindCompleted", true);
+                        result.put("githubBindMessage", "GitHub账号绑定成功");
+                    }
+                } else {
+                    result.put("githubBindCompleted", false);
+                    result.put("githubBindMessage", "未找到待绑定的用户记录");
+                }
+            } catch (NumberFormatException e) {
+                result.put("githubBindCompleted", false);
+                result.put("githubBindMessage", "待绑定学号格式错误");
+            } finally {
+                session.removeAttribute("pendingBindStudentNumber");
+            }
+        }
         
         Optional<Users> userOpt = usersRepository.findByGithubId(githubId);
         if (userOpt.isPresent()) {
@@ -143,8 +183,8 @@ public class UserController {
     }
     
     private Map<String, Object> buildSchoolUserResponse(String studentId, String password, Map<String, Object> result) {
-    result.put("success", true);
-    result.put("studentId", studentId); // 兼容旧字段
+        result.put("success", true);
+        result.put("studentId", studentId); // 兼容旧字段
         result.put("loginType", "school");
         Optional<Users> userOpt = usersRepository.findByStudentNumberAndPassword(Long.valueOf(studentId), password);
         if (userOpt.isPresent()) {
@@ -154,6 +194,8 @@ public class UserController {
             result.put("studentNumber", user.getStudentNumber());
             result.put("needsBinding", false);
             result.put("isAdmin", user.getIsAdmin());
+            result.put("githubId", user.getGithubId());
+            result.put("canBindGithub", user.getGithubId() == null || user.getGithubId().isEmpty());
             addClassInfo(result, user);
             addTasksInfo(result, user);
             addUserTasksInfo(result, user);
@@ -161,6 +203,8 @@ public class UserController {
             result.put("studentNumber", null);
             result.put("needsBinding", true);
             result.put("isAdmin", false);
+            result.put("githubId", null);
+            result.put("canBindGithub", false);
         }
         return result;
     }
@@ -297,5 +341,48 @@ public class UserController {
         }
         
         return result;
+    }
+
+    @PostMapping("/api/user/request-github-bind")
+    public Map<String, Object> requestGithubBind(HttpSession session, HttpServletRequest request) {
+        Map<String, Object> result = new HashMap<>();
+        Object studentIdObj = session.getAttribute("studentId");
+        Object passwordObj = session.getAttribute("password");
+
+        if (studentIdObj == null || passwordObj == null) {
+            result.put("success", false);
+            result.put("message", "请使用学校账号登录后再绑定GitHub");
+            return result;
+        }
+
+        try {
+            Long studentNumber = Long.valueOf(studentIdObj.toString());
+            Optional<Users> userOpt = usersRepository.findByStudentNumberAndPassword(studentNumber, passwordObj.toString());
+            if (!userOpt.isPresent()) {
+                result.put("success", false);
+                result.put("message", "学校账号信息已失效，请重新登录");
+                return result;
+            }
+
+            Users user = userOpt.get();
+            if (user.getGithubId() != null && !user.getGithubId().isEmpty()) {
+                result.put("success", false);
+                result.put("message", "该账号已绑定GitHub");
+                return result;
+            }
+
+            session.setAttribute("pendingBindStudentNumber", studentNumber.toString());
+            String redirectUrl = ServletUriComponentsBuilder
+                .fromContextPath(request)
+                .path("/oauth2/authorization/github")
+                .toUriString();
+            result.put("success", true);
+            result.put("redirectUrl", redirectUrl);
+            return result;
+        } catch (NumberFormatException e) {
+            result.put("success", false);
+            result.put("message", "学号格式有误");
+            return result;
+        }
     }
 }
