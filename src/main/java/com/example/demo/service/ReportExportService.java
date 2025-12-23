@@ -14,16 +14,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * ReportExportService
- * 基于 JSON 模板 + 前端提交数据 生成简单 DOCX。
- * 规则：
- *  header 数组：text -> 一行  label: value
- *  sections：
- *    type=text|textarea -> 标题段 + 内容段
- *    type=list -> 标题段 + 每个条目一段（序号前缀）
- * 占位默认值：若前端未传，使用模板 default；若仍为空，写入 "(未填写)"。
- */
+
 @Service
 public class ReportExportService {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -34,13 +25,7 @@ public class ReportExportService {
         public List<Map<String,Object>> sections = new ArrayList<>();
     }
 
-    /**
-     * 模板缓存：templateCode -> 资源路径 (classpath 相对路径)。
-     * 说明：
-     *  1. 启动首次加载或第一次调用时扫描 classpath:/static/ReportTemplate/*.json
-     *  2. 每个 JSON 读取其 templateCode（优先），没有则跳过；允许重复 code，后出现的覆盖前者（最后版本生效）
-     *  3. 若找不到目标 code，回退到 legacy 文件 report_template.json（保持测试兼容）
-     */
+
     private static final Map<Integer,String> TEMPLATE_CACHE = new HashMap<>();
     private static volatile boolean scanned = false;
     private static final String BASE_PATTERN = "classpath:/static/ReportTemplate/*.json";
@@ -209,7 +194,7 @@ public class ReportExportService {
                 valueRun.setText(stringify(h.get("value")));
             }
 
-            // 底部添加生成时间（可选）
+            // 底部添加生成时间
             XWPFParagraph gen = doc.createParagraph();
             gen.setAlignment(ParagraphAlignment.CENTER);
             gen.setSpacingBefore(600);
